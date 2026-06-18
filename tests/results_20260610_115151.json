@@ -1,0 +1,68 @@
+[
+  {
+    "prompt": "OPEX is 12 million per year",
+    "response": null,
+    "score": null,
+    "error": "quota or parse failure"
+  },
+  {
+    "prompt": "Cost per funded set at 58%",
+    "response": null,
+    "score": null,
+    "error": "quota or parse failure"
+  },
+  {
+    "prompt": "Capital raised in 2027 is 80 million",
+    "response": null,
+    "score": null,
+    "error": "quota or parse failure"
+  },
+  {
+    "prompt": "What is the deployment capacity for C1 in period 85?",
+    "response": null,
+    "score": null,
+    "error": "quota or parse failure"
+  },
+  {
+    "prompt": "Update the underwriting COGS rate for C1 to 25% in period 85",
+    "response": null,
+    "score": null,
+    "error": "quota or parse failure"
+  },
+  {
+    "prompt": "Set the balance lower bound for July 2024 to 1000000",
+    "response": null,
+    "score": null,
+    "error": "quota or parse failure"
+  },
+  {
+    "prompt": "Show me the final bank balance and crossover point",
+    "response": null,
+    "score": null,
+    "error": "quota or parse failure"
+  },
+  {
+    "prompt": "Change the interest rate on Loan1 to 1.5%",
+    "response": null,
+    "score": null,
+    "error": "quota or parse failure"
+  },
+  {
+    "prompt": "Update the overhead",
+    "response": null,
+    "score": null,
+    "error": "quota or parse failure"
+  },
+  {
+    "prompt": "Set the COGS rate to 10%",
+    "response": null,
+    "score": null,
+    "error": "quota or parse failure"
+  },
+  {
+    "prompt": "Fix deployment for C1 in July 2024",
+    "response": null,
+    "score": null,
+    "error": "quota or parse failure"
+  }
+]

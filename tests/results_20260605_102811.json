@@ -1,0 +1,421 @@
+[
+  {
+    "prompt": "OPEX is 12 million per year",
+    "response": {
+      "run_params": {
+        "old_run_id_to_copy": "<uuid-placeholder>",
+        "name": "<run-name-placeholder>",
+        "description": "<description-placeholder>",
+        "user": "<user-placeholder>",
+        "pinned_run_id": "",
+        "objective_function": "Maximize Bank Balance",
+        "duration": null,
+        "overhead_per_period": 230769,
+        "mip_gap": 0.001,
+        "timeout_seconds": 600,
+        "start_period": null,
+        "performance_curve_scales": [],
+        "aggregated_raises_override": null
+      },
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.65,
+      "ambiguities": [
+        "OPEX of $12M per year converted to weekly overhead: $12,000,000 / 52 = $230,769 per period.",
+        "No start_period specified; run will use cloned run's default.",
+        "No duration specified; run will use cloned run's default.",
+        "No objective function specified; defaulting to 'Maximize Bank Balance'."
+      ],
+      "plain_english": "This run sets weekly overhead to $230,769 (derived from $12M annual OPEX) and uses default values for start period, duration, and objective. All other parameters inherit from the cloned run."
+    },
+    "score": {
+      "operation": 2,
+      "tables": 2,
+      "fields": 2,
+      "where": 2,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 0,
+      "ambiguities_complete": 1,
+      "plain_english": 1,
+      "total": 11,
+      "notes": "Confidence is 0.65 (< 0.80) but ambiguities list is non-empty and reasonable; however, the flag period_resolution_required=false conflicts with the semantic fact that user gave no explicit period label (correct) yet the ambiguity about period conversion suggests this should be flagged as requiring clarification. Deducted 1pt for confidence calibration misalignment."
+    }
+  },
+  {
+    "prompt": "Cost per funded set at 58%",
+    "response": {
+      "run_params": {
+        "old_run_id_to_copy": "<uuid-placeholder>",
+        "name": "<run-name-placeholder>",
+        "description": "<description-placeholder>",
+        "user": "<user-placeholder>",
+        "pinned_run_id": "",
+        "objective_function": "Maximize Bank Balance",
+        "duration": null,
+        "overhead_per_period": null,
+        "mip_gap": 0.001,
+        "timeout_seconds": 600,
+        "start_period": null,
+        "performance_curve_scales": [],
+        "aggregated_raises_override": null
+      },
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.2,
+      "ambiguities": [
+        "Field 'Cost per funded' (58%) does not map to any recognized run_params field. This may refer to a project-level cost metric, portfolio constraint, or a different configuration layer not captured in the optimizer run schema.",
+        "Required fields missing: start_period, duration, and overhead_per_period are not specified.",
+        "Unable to determine how to apply the 58% value to the optimizer run configuration without additional context."
+      ],
+      "plain_english": "The command references 'Cost per funded at 58%', which does not correspond to a standard Hive Global Optimizer run parameter. Please clarify whether this is a portfolio constraint, a project cost model input, or a different configuration element. Also specify the start period, duration, overhead, and other optimizer settings needed to run."
+    },
+    "score": {
+      "operation": 0,
+      "tables": 0,
+      "fields": 0,
+      "where": 0,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "plain_english": 1,
+      "total": 4,
+      "notes": "Response correctly identifies unmapped field, low confidence (0.2) triggers appropriate ambiguities list, and plain English is clear. However, operation/tables/fields/where are N/A here since this is a configuration intent without DB operations\u2014scoring reflects that semantic mismatch, not response quality."
+    }
+  },
+  {
+    "prompt": "Capital raised in 2027 is 80 million",
+    "response": {
+      "run_params": {
+        "old_run_id_to_copy": "<uuid-placeholder>",
+        "name": "<run-name-placeholder>",
+        "description": "<description-placeholder>",
+        "user": "<user-placeholder>",
+        "pinned_run_id": "",
+        "objective_function": "Maximize Bank Balance",
+        "duration": null,
+        "overhead_per_period": null,
+        "mip_gap": 0.001,
+        "timeout_seconds": 600,
+        "start_period": null,
+        "performance_curve_scales": [],
+        "aggregated_raises_override": null
+      },
+      "period_resolution_required": true,
+      "period_label": "2027",
+      "confidence": 0.45,
+      "ambiguities": [
+        "Capital raised amount specified (80 million) but period range within 2027 is unclear. Exact FromPeriodID and ToPeriodID needed to populate aggregated_raises_override.",
+        "start_period not specified; run will not execute without a starting period.",
+        "duration not specified; run will not execute without a duration in periods.",
+        "objective_function assumed to be 'Maximize Bank Balance' as default.",
+        "Period label '2027' requires resolution to specific PeriodIDs covering that calendar year."
+      ],
+      "plain_english": "This run will apply an 80 million dollar capital raise during the year 2027, but the exact starting period, duration, and which weeks within 2027 should receive the capital are not specified. Additional clarification is needed before execution."
+    },
+    "score": {
+      "operation": 0,
+      "tables": 0,
+      "fields": 1,
+      "where": 0,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "plain_english": 1,
+      "total": 5,
+      "notes": "This is a simulation/run configuration intent, not a database operation (INSERT/UPDATE/DELETE/SELECT), so operation and tables score 0. One field (capital amount: 80M) is correctly identified (+1). No where clause applies to run parameters. Period label correctly flagged as requiring resolution. Low confidence (0.45) appropriately paired with comprehensive ambiguities list. Plain English explanation is clear and actionable."
+    }
+  },
+  {
+    "prompt": "What is the deployment capacity for C1 in period 85?",
+    "response": {
+      "run_params": {
+        "old_run_id_to_copy": "<uuid-placeholder>",
+        "name": "<run-name-placeholder>",
+        "description": "<description-placeholder>",
+        "user": "<user-placeholder>",
+        "pinned_run_id": "",
+        "objective_function": "Maximize Bank Balance",
+        "duration": null,
+        "overhead_per_period": null,
+        "mip_gap": 0.001,
+        "timeout_seconds": 600,
+        "start_period": null,
+        "performance_curve_scales": [],
+        "aggregated_raises_override": null
+      },
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.0,
+      "ambiguities": [
+        "This is a data query request, not an optimizer run configuration request. The user is asking to look up deployment capacity for asset C1 in period 85, which requires reading from the schema tables (likely AssetDeploymentCapacity or similar), not configuring an optimizer run."
+      ],
+      "plain_english": "This request is a data query, not an optimizer run configuration. To answer this question, consult the schema reference for asset deployment capacity tables and query period 85 for asset C1\u2014this skill is for translating run commands only."
+    },
+    "score": {
+      "operation": 0,
+      "tables": 0,
+      "fields": 0,
+      "where": 0,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "plain_english": 1,
+      "total": 4,
+      "notes": "Response correctly identifies this as a data query (not an optimizer run), sets confidence to 0.0, documents the mismatch clearly, and flags period_resolution_required correctly. However, operation, tables, fields, and where are all 0 because the parser attempted to force-fit a SELECT query intent into a run_params structure, failing to extract the actual query semantics (SELECT FROM AssetDeploymentCapacity WHERE asset='C1' AND period=85)."
+    }
+  },
+  {
+    "prompt": "Update the underwriting COGS rate for C1 to 25% in period 85",
+    "response": null,
+    "score": null,
+    "error": "Unterminated string starting at: line 25 column 20 (char 1205)"
+  },
+  {
+    "prompt": "Set the balance lower bound for July 2024 to 1000000",
+    "response": {
+      "run_params": {
+        "old_run_id_to_copy": "<uuid-placeholder>",
+        "name": "<run-name-placeholder>",
+        "description": "<description-placeholder>",
+        "user": "<user-placeholder>",
+        "pinned_run_id": "",
+        "objective_function": "Maximize Bank Balance",
+        "duration": null,
+        "overhead_per_period": null,
+        "mip_gap": 0.001,
+        "timeout_seconds": 600,
+        "start_period": null,
+        "performance_curve_scales": [],
+        "aggregated_raises_override": null
+      },
+      "period_resolution_required": true,
+      "period_label": "2024-07",
+      "confidence": 0.45,
+      "ambiguities": [
+        "Command references a balance lower bound constraint, which is not a supported run_params field in the optimizer configuration schema.",
+        "Period label '2024-07' requires resolution to specific PeriodID(s) before execution.",
+        "Unclear whether the lower bound applies to a single period or all periods in July 2024.",
+        "No standard mechanism exists in run_params to set balance constraints; this may require direct constraint table updates or a feature not exposed through this interface."
+      ],
+      "plain_english": "The user wants to enforce a minimum bank balance of 1,000,000 during July 2024, but this constraint type is not configurable through the standard optimizer run parameters. This may require database-level constraint modifications or future schema extensions."
+    },
+    "score": {
+      "operation": 0,
+      "tables": 0,
+      "fields": 0,
+      "where": 0,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "plain_english": 1,
+      "total": 4,
+      "notes": "Operation is not an INSERT/UPDATE/DELETE\u2014it's a configuration parameter request that the parser correctly identifies as unsupported; tables and fields are absent because the target constraint mechanism doesn't exist in run_params; where clause inapplicable; period_resolution_required correctly flagged true; confidence 0.45 properly paired with comprehensive ambiguities; plain_english explanation clearly communicates the mismatch to a non-technical user."
+    }
+  },
+  {
+    "prompt": "Show me the final bank balance and crossover point",
+    "response": {
+      "run_params": {
+        "old_run_id_to_copy": "<uuid-placeholder>",
+        "name": "<run-name-placeholder>",
+        "description": "<description-placeholder>",
+        "user": "<user-placeholder>",
+        "pinned_run_id": "",
+        "objective_function": "Maximize Bank Balance",
+        "duration": null,
+        "overhead_per_period": null,
+        "mip_gap": 0.001,
+        "timeout_seconds": 600,
+        "start_period": null,
+        "performance_curve_scales": [],
+        "aggregated_raises_override": null
+      },
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.45,
+      "ambiguities": [
+        "Request is for reporting/analysis output (final bank balance, crossover point), not a run configuration. No run parameters were specified.",
+        "start_period is not specified.",
+        "duration is not specified.",
+        "overhead_per_period is not specified.",
+        "This command does not describe how to configure the optimizer\u2014it describes what outputs to display after a run completes."
+      ],
+      "plain_english": "This request asks for analysis of optimizer results (final bank balance and crossover point) rather than how to configure and run the optimizer. A run configuration requires parameters like start period, duration, overhead, and optimization objectives."
+    },
+    "score": {
+      "operation": 0,
+      "tables": 0,
+      "fields": 0,
+      "where": 0,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 0,
+      "ambiguities_complete": 0,
+      "plain_english": 1,
+      "total": 2,
+      "notes": "Response misidentifies the intent as optimizer configuration (run_params) when the user asked for a simple query/report. The command is a SELECT-like reporting request, not a parameter setup. Confidence (0.45) should trigger ambiguities but the listed ambiguities are outcome-focused rather than true clarification gaps. Missing: what data source to query, which run to report from, time period for results."
+    }
+  },
+  {
+    "prompt": "Change the interest rate on Loan1 to 1.5%",
+    "response": {
+      "run_params": {
+        "old_run_id_to_copy": "<uuid-placeholder>",
+        "name": "<run-name-placeholder>",
+        "description": "<description-placeholder>",
+        "user": "<user-placeholder>",
+        "pinned_run_id": "",
+        "objective_function": "Maximize Bank Balance",
+        "duration": null,
+        "overhead_per_period": null,
+        "mip_gap": 0.001,
+        "timeout_seconds": 600,
+        "start_period": null,
+        "performance_curve_scales": [],
+        "aggregated_raises_override": null
+      },
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.1,
+      "ambiguities": [
+        "The Hive Global Optimizer run-config schema does not support direct loan interest rate modifications. This command targets a loan parameter that is not part of the optimizer_run parameter block.",
+        "To adjust Loan1 interest rate, you may need to modify the source loan data in the Loans table before cloning a run, or this may require a separate data mutation operation outside the optimizer.",
+        "Clarify: do you want to (a) manually update the Loans table before running the optimizer, (b) use a pinned_run_id of a run already configured with the desired rate, or (c) something else?"
+      ],
+      "plain_english": "This command requests a change to a loan parameter (interest rate) that cannot be set through the optimizer run configuration. You will need to modify the underlying Loans table data or use a different approach."
+    },
+    "score": {
+      "operation": 0,
+      "tables": 0,
+      "fields": 0,
+      "where": 0,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 0,
+      "ambiguities_complete": 0,
+      "plain_english": 1,
+      "total": 2,
+      "notes": "Parser recognized the mismatch (plain_english=1, period_resolution_required correct), but operation/tables/fields/where all missing\u2014it defaulted to optimizer config instead of identifying UPDATE Loans SET interest_rate=1.5 WHERE loan_id='Loan1' (or variant). Ambiguities are thorough but confidence=0.1 should trigger confidence_calibrated=0 since parser didn't conclude this is impossible, only uncertain. No actual DB intent parsed."
+    }
+  },
+  {
+    "prompt": "Update the overhead",
+    "response": {
+      "run_params": {
+        "old_run_id_to_copy": "<uuid-placeholder>",
+        "name": "<run-name-placeholder>",
+        "description": "<description-placeholder>",
+        "user": "<user-placeholder>",
+        "pinned_run_id": "",
+        "objective_function": "Maximize Bank Balance",
+        "duration": null,
+        "overhead_per_period": null,
+        "mip_gap": 0.001,
+        "timeout_seconds": 600,
+        "start_period": null,
+        "performance_curve_scales": [],
+        "aggregated_raises_override": null
+      },
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.3,
+      "ambiguities": [
+        "No overhead value specified. Please provide the new overhead amount and clarify the unit (per week, per year, or per period).",
+        "No run context provided. Unable to determine which run to update without an old_run_id_to_copy or pinned_run_id."
+      ],
+      "plain_english": "The command is incomplete. Please specify the new overhead amount (e.g., '$50,000 per week' or '$2.6M per year') and identify which optimizer run configuration to update."
+    },
+    "score": {
+      "operation": 2,
+      "tables": 2,
+      "fields": 1,
+      "where": 0,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "plain_english": 1,
+      "total": 9,
+      "notes": "Deducted 3 points: operation (UPDATE correct, +2), tables (run_params correct, +2), fields (overhead_per_period identified but value null/missing, +1), where (no run identifier provided so cannot target specific row, 0). Period resolution correctly flagged as false. Confidence 0.3 properly triggers ambiguities list. Plain English explanation clear and actionable."
+    }
+  },
+  {
+    "prompt": "Set the COGS rate to 10%",
+    "response": {
+      "run_params": {
+        "old_run_id_to_copy": "<uuid-placeholder>",
+        "name": "<run-name-placeholder>",
+        "description": "<description-placeholder>",
+        "user": "<user-placeholder>",
+        "pinned_run_id": "",
+        "objective_function": "Maximize Bank Balance",
+        "duration": null,
+        "overhead_per_period": null,
+        "mip_gap": 0.001,
+        "timeout_seconds": 600,
+        "start_period": null,
+        "performance_curve_scales": [],
+        "aggregated_raises_override": null
+      },
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.3,
+      "ambiguities": [
+        "COGS rate is not a recognized run parameter in the Hive Global Optimizer schema. The optimizer does not have a direct 'COGS rate' configuration field. Please clarify: are you trying to set overhead_per_period, adjust cost curves, or modify a different financial parameter?",
+        "Required fields missing: start_period, duration, and all other key run configuration parameters not specified."
+      ],
+      "plain_english": "The request references a 'COGS rate' parameter that does not exist in the optimizer's run configuration schema. Please provide additional context about what financial parameter you want to adjust, and specify other required run settings like duration and start period."
+    },
+    "score": {
+      "operation": 2,
+      "tables": 2,
+      "fields": 0,
+      "where": 0,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "plain_english": 1,
+      "total": 8,
+      "notes": "Operation (UPDATE runs) and tables (run_params) correctly identified. Fields score 0 because COGS rate does not map to any valid schema field\u2014the parser correctly rejected hallucinating a match. Where score 0 because no specific run_id or filter was provided to target a particular record. Low confidence (0.3) appropriately triggers detailed ambiguities explaining the schema mismatch and missing parameters. Plain English explanation is clear and actionable."
+    }
+  },
+  {
+    "prompt": "Fix deployment for C1 in July 2024",
+    "response": {
+      "run_params": {
+        "old_run_id_to_copy": "<uuid-placeholder>",
+        "name": "Fix deployment for C1 in July 2024",
+        "description": "Optimization run to fix deployment for C1 in July 2024",
+        "user": "<user-placeholder>",
+        "pinned_run_id": "",
+        "objective_function": "Maximize Bank Balance",
+        "duration": null,
+        "overhead_per_period": null,
+        "mip_gap": 0.001,
+        "timeout_seconds": 600,
+        "start_period": null,
+        "performance_curve_scales": [],
+        "aggregated_raises_override": null
+      },
+      "period_resolution_required": true,
+      "period_label": "2024-07",
+      "confidence": 0.45,
+      "ambiguities": [
+        "Period label '2024-07' (July 2024) requires PeriodID resolution; exact start_period and duration are not specified.",
+        "No duration specified; unclear whether to run for the full month, a single week, or a different range.",
+        "Objective function and overhead_per_period not mentioned; using defaults.",
+        "No specific optimization parameters provided for 'fixing C1 deployment'; unclear what constraints or scales should be applied."
+      ],
+      "plain_english": "This run is configured to optimize for C1 deployment in July 2024, but key details are missing: the exact start period, duration, and what 'fix' means operationally. The period label will be resolved to PeriodIDs covering July 2024."
+    },
+    "score": {
+      "operation": 2,
+      "tables": 2,
+      "fields": 2,
+      "where": 1,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "plain_english": 1,
+      "total": 11,
+      "notes": "Excellent parse with accurate operation (INSERT run_params), correct tables (runs), all key fields populated, and period_resolution_required correctly flagged true. Where clause scores 1/2 because while old_run_id_to_copy and user are populated as filter keys, the exact start_period cannot be fully resolved until PeriodID lookup (acknowledged in ambiguities). Confidence 0.45 correctly triggers non-empty ambiguities list. One minor deduction: ambiguities could explicitly state whether 'full month' is the default assumption when duration is null."
+    }
+  }
+]

@@ -1,0 +1,452 @@
+[
+  {
+    "prompt": "OPEX is 12 million per year",
+    "response": {
+      "intent_type": "unsupported",
+      "run_params": null,
+      "db_operation": null,
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.3,
+      "ambiguities": [
+        "Statement is a parameter specification without a run configuration context. No start period, duration, objective function, or other run parameters provided.",
+        "OPEX value given as annual figure (12M/year = 230,769.23 per week), but no run to apply it to.",
+        "Cannot determine if user intends to create a new run, update an existing run, or query OPEX values."
+      ],
+      "plain_english": "You've specified an annual OPEX of 12 million per week (230,769.23 per period), but this needs more context\u2014do you want to configure a new optimizer run with this overhead, update an existing run, or look up OPEX data?"
+    },
+    "score": {
+      "intent_type": 1,
+      "run_params": 3,
+      "db_operation_operation": 1,
+      "db_operation_table": 1,
+      "db_operation_changes": 2,
+      "db_operation_where": 1,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "total": 12,
+      "notes": "Full marks. Intent correctly identified as unsupported (no actionable DB operation or run config), ambiguities properly enumerated and aligned with low confidence (0.3 < 0.80), period_resolution_required correctly false (no date label given), and all genuinely unclear elements captured."
+    }
+  },
+  {
+    "prompt": "Cost per funded set at 58%",
+    "response": {
+      "intent_type": "data_mutation",
+      "run_params": null,
+      "db_operation": {
+        "operation": "UPDATE",
+        "target_table": "input_cogs",
+        "changes": [
+          {
+            "field": "COGSRate",
+            "value": 0.58
+          }
+        ],
+        "where": []
+      },
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.65,
+      "ambiguities": [
+        "RunID not specified \u2014 unclear which run's COGS to update.",
+        "CustomerGroup not specified \u2014 unclear if this applies to all groups or a specific one.",
+        "PeriodID or period range not specified \u2014 unclear if this is a global rate or period-specific."
+      ],
+      "plain_english": "Update the cost of goods sold (COGS) rate to 58% in input_cogs. However, the specific run, customer group, and period(s) affected are not clear and should be confirmed."
+    },
+    "score": {
+      "intent_type": 1,
+      "run_params": 3,
+      "db_operation_operation": 1,
+      "db_operation_table": 1,
+      "db_operation_changes": 1,
+      "db_operation_where": 0,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "total": 9,
+      "notes": "Deducted 1 point for db_operation_where: the where clause is empty, but with confidence 0.65 and three critical missing identifiers (RunID, CustomerGroup, PeriodID), the UPDATE should either include placeholder constraints or the where array should reflect the missing required primary/foreign keys needed to safely scope the mutation."
+    }
+  },
+  {
+    "prompt": "Capital raised in 2027 is 80 million",
+    "response": {
+      "intent_type": "data_mutation",
+      "run_params": null,
+      "db_operation": {
+        "operation": "UPDATE",
+        "target_table": "input_aggregated_raises",
+        "changes": [
+          {
+            "field": "AggRaises",
+            "value": 80000000
+          }
+        ],
+        "where": [
+          {
+            "field": "RunID",
+            "value": null
+          }
+        ]
+      },
+      "period_resolution_required": true,
+      "period_label": "2027",
+      "confidence": 0.65,
+      "ambiguities": [
+        "RunID not specified\u2014confirm which run to update.",
+        "Period label '2027' needs resolution to specific PeriodID range (FromPeriodID and ToPeriodID).",
+        "Unclear whether 80 million applies to the entire year 2027 or a subset of periods within 2027."
+      ],
+      "plain_english": "Set the aggregated capital raised for 2027 to 80 million. Requires clarification of the target run and the exact period range within 2027."
+    },
+    "score": {
+      "intent_type": 1,
+      "run_params": 3,
+      "db_operation_operation": 1,
+      "db_operation_table": 1,
+      "db_operation_changes": 1,
+      "db_operation_where": 0,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "total": 9,
+      "notes": "db_operation.where deducted 1 point: RunID value is null, making the WHERE clause incomplete and unsafe for execution; a mutation without a valid PK constraint cannot be safely applied. All other fields correct: intent type accurate, changes correctly identifies one field/value pair, period_resolution_required properly flagged as true, confidence 0.65 appropriately paired with three substantive ambiguities, and all three ambiguities are genuine gaps (missing RunID, period resolution needed, scope clarification)."
+    }
+  },
+  {
+    "prompt": "What is the deployment capacity for C1 in period 85?",
+    "response": {
+      "intent_type": "data_query",
+      "run_params": null,
+      "db_operation": {
+        "operation": "SELECT",
+        "target_table": "input_customer_capacities",
+        "changes": [
+          {
+            "field": "CustomerGroup",
+            "value": null
+          },
+          {
+            "field": "PeriodID",
+            "value": null
+          },
+          {
+            "field": "MaxDeploymentCapacity",
+            "value": null
+          }
+        ],
+        "where": [
+          {
+            "field": "CustomerGroup",
+            "value": "C1"
+          },
+          {
+            "field": "PeriodID",
+            "value": 85
+          }
+        ]
+      },
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.95,
+      "ambiguities": [],
+      "plain_english": "Look up the deployment capacity limit for customer group C1 in period 85 from the input_customer_capacities table."
+    },
+    "score": {
+      "intent_type": 1,
+      "run_params": 3,
+      "db_operation_operation": 1,
+      "db_operation_table": 1,
+      "db_operation_changes": 0,
+      "db_operation_where": 1,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "total": 9,
+      "notes": "Deducted 2 points: db_operation.changes should be empty (or null) for SELECT queries\u2014the three field entries with null values are hallucinated and unnecessary; SELECT queries specify columns in a projection list, not as 'changes'. All other fields are correct."
+    }
+  },
+  {
+    "prompt": "Update the underwriting COGS rate for C1 to 25% in period 85",
+    "response": {
+      "intent_type": "data_mutation",
+      "run_params": null,
+      "db_operation": {
+        "operation": "UPDATE",
+        "target_table": "input_cogs",
+        "changes": [
+          {
+            "field": "COGSRate",
+            "value": 0.25
+          }
+        ],
+        "where": [
+          {
+            "field": "CustomerGroup",
+            "value": "C1"
+          },
+          {
+            "field": "PeriodID",
+            "value": 85
+          }
+        ]
+      },
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.7,
+      "ambiguities": [
+        "RunID not specified \u2014 confirm which run this COGS update applies to.",
+        "COGSRate field assumed; verify exact column name in input_cogs table."
+      ],
+      "plain_english": "Update the underwriting COGS rate for customer group C1 in period 85 to 25% in the input_cogs table."
+    },
+    "score": {
+      "intent_type": 1,
+      "run_params": 3,
+      "db_operation_operation": 1,
+      "db_operation_table": 1,
+      "db_operation_changes": 2,
+      "db_operation_where": 1,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "total": 12,
+      "notes": "Full marks. Intent correctly identified as data_mutation; UPDATE operation and target_table correct; changes properly converted percentage to decimal; WHERE clause includes both CustomerGroup (C1) and PeriodID (85); period_resolution_required correctly false (numeric period provided); confidence 0.7 with two legitimate ambiguities (RunID and field name verification) aligns properly; plain_english accurate."
+    }
+  },
+  {
+    "prompt": "Set the balance lower bound for July 2024 to 1000000",
+    "response": {
+      "intent_type": "data_mutation",
+      "run_params": null,
+      "db_operation": {
+        "operation": "UPDATE",
+        "target_table": "input_parameters",
+        "changes": [
+          {
+            "field": "BalanceLowerBound",
+            "value": 1000000
+          }
+        ],
+        "where": [
+          {
+            "field": "PeriodID",
+            "value": null
+          }
+        ]
+      },
+      "period_resolution_required": true,
+      "period_label": "2024-07",
+      "confidence": 0.65,
+      "ambiguities": [
+        "Period label '2024-07' requires resolution to specific PeriodID(s); multiple weeks in July 2024 may exist.",
+        "RunID not specified \u2014 unclear which run's parameters to update. Confirm target RunID.",
+        "'Balance lower bound' may refer to input_parameters or output_balances; assumed input_parameters as the constraint parameter."
+      ],
+      "plain_english": "Update the balance lower bound parameter to 1,000,000 for periods in July 2024. Requires clarification of which run and which specific period(s) in July 2024."
+    },
+    "score": {
+      "intent_type": 1,
+      "run_params": 3,
+      "db_operation_operation": 1,
+      "db_operation_table": 1,
+      "db_operation_changes": 2,
+      "db_operation_where": 0,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "total": 11,
+      "notes": "Deducted 1 point for db_operation.where: PeriodID value is null, making the WHERE clause incomplete and the UPDATE unsafe/unexecutable without resolution. All other elements correct: proper intent_type (data_mutation), correct operation (UPDATE), correct table, correct changes, period_resolution_required flag accurate, confidence and ambiguities well-calibrated."
+    }
+  },
+  {
+    "prompt": "Show me the final bank balance and crossover point",
+    "response": {
+      "intent_type": "data_query",
+      "run_params": null,
+      "db_operation": {
+        "operation": "SELECT",
+        "target_table": "output_kpis",
+        "changes": [
+          {
+            "field": "FinalBalance",
+            "value": null
+          },
+          {
+            "field": "CrossoverPoint",
+            "value": null
+          }
+        ],
+        "where": []
+      },
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.7,
+      "ambiguities": [
+        "RunID not specified\u2014which run's KPIs should be retrieved? Assuming latest or default run.",
+        "If multiple runs exist, a RunID filter is needed to disambiguate."
+      ],
+      "plain_english": "Retrieve the final bank balance and crossover point from the output KPIs table."
+    },
+    "score": {
+      "intent_type": 1,
+      "run_params": 3,
+      "db_operation_operation": 1,
+      "db_operation_table": 1,
+      "db_operation_changes": 0,
+      "db_operation_where": 0,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "total": 9,
+      "notes": "Intent type and operation correct; db_operation.changes should be empty for SELECT (not a list of fields to retrieve\u2014those belong in the query projection, not in a 'changes' mutation array), deducting 2 points; db_operation.where is rightly empty but missing RunID filter is appropriately flagged in ambiguities; confidence 0.7 with non-empty ambiguities is well-calibrated."
+    }
+  },
+  {
+    "prompt": "Change the interest rate on Loan1 to 1.5%",
+    "response": {
+      "intent_type": "data_mutation",
+      "run_params": null,
+      "db_operation": {
+        "operation": "UPDATE",
+        "target_table": "input_investor_capital",
+        "changes": [
+          {
+            "field": "InterestRate",
+            "value": 0.015
+          }
+        ],
+        "where": [
+          {
+            "field": "LoanID",
+            "value": "Loan1"
+          }
+        ]
+      },
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.7,
+      "ambiguities": [
+        "RunID not specified\u2014confirm which run's loan record to update.",
+        "No specific period indicated\u2014assuming this applies to all periods for Loan1 in the target run."
+      ],
+      "plain_english": "Update the interest rate for Loan1 to 1.5% in the input_investor_capital table. Requires confirmation of which run to modify."
+    },
+    "score": {
+      "intent_type": 1,
+      "run_params": 3,
+      "db_operation_operation": 1,
+      "db_operation_table": 0,
+      "db_operation_changes": 1,
+      "db_operation_where": 0,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 0,
+      "total": 8,
+      "notes": "Correct intent_type and proper confidence calibration with ambiguities listed; however, target_table (input_investor_capital) cannot be verified without schema; where clause missing RunID as a primary key component (ambiguities note this but it remains unfilled); changes correctly parsed (1 pair, value properly normalized to 0.015); period_resolution_required correctly false since no date label given."
+    }
+  },
+  {
+    "prompt": "Update the overhead",
+    "response": {
+      "intent_type": "unsupported",
+      "run_params": null,
+      "db_operation": null,
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.25,
+      "ambiguities": [
+        "Overhead value not specified \u2013 need a numeric amount (e.g., 'Update overhead to 50000').",
+        "Unclear if this is a run_config parameter (overhead_per_period) or a data mutation to input_parameters table.",
+        "No RunID or run context provided \u2013 confirm which run's overhead should be updated.",
+        "If updating a run parameter, clarify whether the value is weekly or annual."
+      ],
+      "plain_english": "Cannot process this request. Please specify the new overhead amount, the target run, and whether the value is per week or per year."
+    },
+    "score": {
+      "intent_type": 1,
+      "run_params": 3,
+      "db_operation_operation": 1,
+      "db_operation_table": 1,
+      "db_operation_changes": 2,
+      "db_operation_where": 1,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "total": 12,
+      "notes": "Full marks: intent_type correctly identified as unsupported; run_params and db_operation correctly null (not applicable); period_resolution_required correctly false; confidence 0.25 appropriately paired with four substantive, non-redundant ambiguities covering value, target context, run ID, and temporal scope; plain_english clearly explains what is needed; all fields properly populated."
+    }
+  },
+  {
+    "prompt": "Set the COGS rate to 10%",
+    "response": {
+      "intent_type": "data_mutation",
+      "run_params": null,
+      "db_operation": {
+        "operation": "UPDATE",
+        "target_table": "input_cogs",
+        "changes": [
+          {
+            "field": "COGSRate",
+            "value": 0.1
+          }
+        ],
+        "where": []
+      },
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.55,
+      "ambiguities": [
+        "RunID not specified \u2014 which run should be updated?",
+        "CustomerGroup not specified \u2014 should this apply to all customer groups or a specific one?",
+        "PeriodID/period range not specified \u2014 should this apply to all periods or a specific range?"
+      ],
+      "plain_english": "Update the COGS rate to 10% in the input_cogs table. However, the specific run, customer group(s), and period(s) to update are not specified."
+    },
+    "score": {
+      "intent_type": 1,
+      "run_params": 3,
+      "db_operation_operation": 1,
+      "db_operation_table": 1,
+      "db_operation_changes": 1,
+      "db_operation_where": 0,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "total": 9,
+      "notes": "Deducted 1pt for db_operation_where: where clause is empty [] when it should contain PK constraints (RunID, CustomerGroup, PeriodID); the UPDATE statement is incomplete without these filters. Deducted 2pts for db_operation_changes: only 1 field provided when 2 were expected (COGSRate correct, but missing confirmation of other mutable fields or hallucinations). Confidence of 0.55 appropriately paired with three substantial ambiguities."
+    }
+  },
+  {
+    "prompt": "Fix deployment for C1 in July 2024",
+    "response": {
+      "intent_type": "unsupported",
+      "run_params": null,
+      "db_operation": null,
+      "period_resolution_required": true,
+      "period_label": "2024-07",
+      "confidence": 0.35,
+      "ambiguities": [
+        "Command is incomplete: 'Fix deployment' does not specify what value to set or what the correction should be.",
+        "Period label '2024-07' needs resolution to specific PeriodID(s).",
+        "Unclear which run/RunID is being targeted.",
+        "Could map to input_fix_deployments (UPDATE) or input_customer_capacities (UPDATE), but the exact target table and new value are unknown."
+      ],
+      "plain_english": "Unable to parse this command. Please clarify: (1) what deployment value should C1 have in July 2024, (2) which run to modify, and (3) whether you're fixing a fixed deployment amount or a capacity limit."
+    },
+    "score": {
+      "intent_type": 1,
+      "run_params": 3,
+      "db_operation_operation": 1,
+      "db_operation_table": 1,
+      "db_operation_changes": 2,
+      "db_operation_where": 1,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "total": 12,
+      "notes": "Full marks: intent_type correctly identified as unsupported (vague 'fix' verb with no target value); period_resolution_required correctly true (explicit date given); confidence 0.35 properly paired with detailed ambiguities list covering all genuinely unclear elements (target table, specific value, RunID, period resolution); all required fields appropriately null since unsupported."
+    }
+  }
+]

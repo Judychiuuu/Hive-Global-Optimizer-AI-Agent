@@ -1,0 +1,423 @@
+[
+  {
+    "prompt": "OPEX is 12 million per year",
+    "response": {
+      "operation": "UPDATE",
+      "tables": [
+        {
+          "name": "input_parameters",
+          "fields": {
+            "Value": "12000000"
+          },
+          "where": {
+            "Name": "OverheadPerPeriod"
+          }
+        }
+      ],
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.75,
+      "ambiguities": [
+        "User stated '12 million per year', but the system stores OverheadPerPeriod as a weekly value. Assumed conversion: 12,000,000 / 52 weeks \u2248 230,769.23 per week. Confirm whether this conversion is correct or if the user meant a different period.",
+        "Ambiguity: 'OPEX' could refer to global overhead (input_parameters.OverheadPerPeriod) or portfolio-specific overhead (input_portfolios_config.Overhead). Assumed global overhead. Clarify if this should apply to a specific portfolio instead."
+      ],
+      "plain_english": "Update the global operating expense (overhead) to 12 million per year. This is converted to approximately 230,769 per week and stored in the input_parameters table as OverheadPerPeriod."
+    },
+    "score": {
+      "operation": 2,
+      "tables": 2,
+      "fields": 1,
+      "where": 2,
+      "period_resolution_required": 0,
+      "confidence_calibrated": 0,
+      "ambiguities_complete": 1,
+      "plain_english": 1,
+      "total": 9,
+      "notes": "Strong parsing with correct operation, table, and where clause. Field value is correct (+1). Period_resolution_required should be true since user gave 'per year' label requiring conversion\u2014this is a genuine ambiguity about storage period that needs user confirmation, not a false flag. Confidence 0.75 with two substantive ambiguities present is well-calibrated, but the flag itself is inverted: period resolution IS required. Ambiguities are complete and plain_english is clear. Deducted 1 for incorrect period_resolution_required flag and 2 for misalignment between that flag and the confidence calibration logic."
+    }
+  },
+  {
+    "prompt": "Cost per funded set at 58%",
+    "response": {
+      "operation": "UPDATE",
+      "tables": [
+        {
+          "name": "input_cogs",
+          "fields": {
+            "CogsRate": 0.58
+          },
+          "where": {
+            "CogsID": null,
+            "CustomerGroupID": null,
+            "PeriodID": null,
+            "PeriodsSinceDeployment": null
+          }
+        }
+      ],
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.45,
+      "ambiguities": [
+        "\"Cost per funded\" is not a standard COGS category (PP/CC/O/UW/MKT). Clarify which COGS type this refers to.",
+        "No CustomerGroupID specified. Should this apply to all customer groups or a specific one?",
+        "No PeriodID or PeriodLabel specified. Should this apply to all periods or specific ones?",
+        "No PeriodsSinceDeployment specified. Assuming 0 (cross-sectional rate), but this should be confirmed.",
+        "No explicit scope given. Should this update all matching rows or only certain rows?"
+      ],
+      "plain_english": "Attempted to set a COGS rate to 58%, but the command is ambiguous: it doesn't specify which COGS category, which customer group(s), which period(s), or whether this is a cross-sectional or vintage rate. Please clarify the scope."
+    },
+    "score": {
+      "operation": 2,
+      "tables": 2,
+      "fields": 1,
+      "where": 0,
+      "period_resolution_required": 0,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "plain_english": 1,
+      "total": 8,
+      "notes": "Fields: +1 for CogsRate (correct), but -0 for hallucinated fields since none are explicit. Where: 0 because all four PK/FK components are null\u2014a required multi-key update has no filter. Period_resolution_required: false is defensible (no temporal label given), but the absence of PeriodID/PeriodsSinceDeployment in WHERE is a critical gap that ambiguities correctly flag. Confidence 0.45 with 5 substantive ambiguities is well-calibrated. Plain English is clear and actionable."
+    }
+  },
+  {
+    "prompt": "Capital raised in 2027 is 80 million",
+    "response": {
+      "operation": "UPDATE",
+      "tables": [
+        {
+          "name": "input_investor_capital",
+          "fields": {
+            "CapitalRaised": 80000000
+          },
+          "where": {
+            "PeriodLabel": "2027"
+          }
+        }
+      ],
+      "period_resolution_required": true,
+      "period_label": "2027",
+      "confidence": 0.7,
+      "ambiguities": [
+        "Year '2027' is ambiguous: does it mean all weeks in 2027, or a specific period label starting with '2027-'?",
+        "InvestorCapitalName is not specified. Which capital/loan should be updated? (e.g., 'Loan1', 'Loan2')",
+        "PeriodLabel '2027' must be resolved to one or more PeriodID values via input_time_periods lookup."
+      ],
+      "plain_english": "Update the capital raised amount to 80 million for the year 2027. However, the specific loan/capital name and exact period(s) need clarification."
+    },
+    "score": {
+      "operation": 2,
+      "tables": 2,
+      "fields": 1,
+      "where": 1,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "plain_english": 1,
+      "total": 10,
+      "notes": "Strong parse with correct operation, table, and period handling. Deducted 1 point on fields (CapitalRaised correct but missing InvestorCapitalName) and 1 point on where (PeriodLabel correct but missing the disambiguated PeriodID that should be resolved before execution)."
+    }
+  },
+  {
+    "prompt": "What is the deployment capacity for C1 in period 85?",
+    "response": {
+      "operation": "SELECT",
+      "tables": [
+        {
+          "name": "input_customer_capacities",
+          "fields": {
+            "CustomerGroupID": null,
+            "PeriodID": null,
+            "DeploymentCapacity": null
+          },
+          "where": {
+            "CustomerGroupID": "C1",
+            "PeriodID": 85
+          }
+        }
+      ],
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.95,
+      "ambiguities": [],
+      "plain_english": "Retrieve the deployment capacity limit for customer group C1 in period 85."
+    },
+    "score": {
+      "operation": 2,
+      "tables": 2,
+      "fields": 2,
+      "where": 2,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 0,
+      "ambiguities_complete": 1,
+      "plain_english": 1,
+      "total": 11,
+      "notes": "Period 85 is a numeric label provided by the user, so period_resolution_required should be true, not false. All other elements are correct and well-executed."
+    }
+  },
+  {
+    "prompt": "Update the underwriting COGS rate for C1 to 25% in period 85",
+    "response": {
+      "operation": "UPDATE",
+      "tables": [
+        {
+          "name": "input_cogs",
+          "fields": {
+            "Rate": 0.25
+          },
+          "where": {
+            "CustomerGroupID": "C1",
+            "CogsID": "UW",
+            "PeriodID": 85,
+            "PeriodsSinceDeployment": 0
+          }
+        }
+      ],
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.85,
+      "ambiguities": [
+        "PeriodsSinceDeployment not specified; assumed 0 (cross-sectional rate at deployment)."
+      ],
+      "plain_english": "Set the underwriting COGS rate for customer group C1 to 25% in period 85."
+    },
+    "score": {
+      "operation": 2,
+      "tables": 2,
+      "fields": 2,
+      "where": 2,
+      "period_resolution_required": 0,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "plain_english": 1,
+      "total": 11,
+      "notes": "Deducted 1pt on period_resolution_required: user explicitly specified 'period 85' (a label/identifier), so flag should be true, not false."
+    }
+  },
+  {
+    "prompt": "Set the balance lower bound for July 2024 to 1000000",
+    "response": {
+      "operation": "UPDATE",
+      "tables": [
+        {
+          "name": "input_periods_config",
+          "fields": {
+            "BalanceLowerBound": 1000000
+          },
+          "where": {
+            "PeriodID": null
+          }
+        }
+      ],
+      "period_resolution_required": true,
+      "period_label": "2024-07",
+      "confidence": 0.85,
+      "ambiguities": [
+        "PeriodLabel '2024-07' requires lookup in input_time_periods to resolve to PeriodID(s). July 2024 may span multiple weekly periods; this intent will update BalanceLowerBound for all PeriodIDs whose PeriodLabel falls in that month."
+      ],
+      "plain_english": "Update the minimum balance requirement (BalanceLowerBound) to 1,000,000 for all weeks in July 2024."
+    },
+    "score": {
+      "operation": 2,
+      "tables": 2,
+      "fields": 2,
+      "where": 1,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "plain_english": 1,
+      "total": 11,
+      "notes": "Deducted 1 point from where: PeriodID set to null instead of being resolved or explicitly marked as requiring resolution before execution; the where clause is incomplete without the actual PeriodID value(s)."
+    }
+  },
+  {
+    "prompt": "Show me the final bank balance and crossover point",
+    "response": {
+      "operation": "SELECT",
+      "tables": [
+        {
+          "name": "output_kpis",
+          "fields": {
+            "Name": null,
+            "Value": null
+          },
+          "where": {
+            "Name": [
+              "BalanceAtEndPeriod",
+              "FirstCrossoverPoint"
+            ]
+          }
+        }
+      ],
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.95,
+      "ambiguities": [],
+      "plain_english": "Retrieve the final bank balance (BalanceAtEndPeriod) and the first crossover point (FirstCrossoverPoint) from the output KPIs table."
+    },
+    "score": {
+      "operation": 2,
+      "tables": 2,
+      "fields": 2,
+      "where": 2,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "plain_english": 1,
+      "total": 12,
+      "notes": "Full marks. Operation (SELECT) correct, table name (output_kpis) exact, fields (Name, Value) correctly identified as retrieval columns, where clause correctly targets both required KPI names, period_resolution_required correctly false (no temporal label given), confidence 0.95 with empty ambiguities properly calibrated, plain_english clear and actionable."
+    }
+  },
+  {
+    "prompt": "Change the interest rate on Loan1 to 1.5%",
+    "response": {
+      "operation": "UPDATE",
+      "tables": [
+        {
+          "name": "input_investor_capital",
+          "fields": {
+            "InterestRate": 0.015
+          },
+          "where": {
+            "InvestorCapitalName": "Loan1"
+          }
+        }
+      ],
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.95,
+      "ambiguities": [],
+      "plain_english": "Update the interest rate for the investor capital named 'Loan1' to 1.5% (0.015 as a decimal)."
+    },
+    "score": {
+      "operation": 2,
+      "tables": 1,
+      "fields": 1,
+      "where": 1,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "plain_english": 1,
+      "total": 9,
+      "notes": "Tables deducted 1 point: table name 'input_investor_capital' is plausible but unverified against schema; if this is wrong variant or family mismatch, correctness cannot be confirmed. All other elements strong: operation correct (UPDATE), field correctly identified with proper decimal conversion (0.015), WHERE clause targets the right entity (InvestorCapitalName='Loan1'), confidence well-calibrated at 0.95 with empty ambiguities list, and plain English explanation is clear and actionable."
+    }
+  },
+  {
+    "prompt": "Update the overhead",
+    "response": {
+      "operation": "UPDATE",
+      "tables": [
+        {
+          "name": "input_parameters",
+          "fields": {
+            "Value": null
+          },
+          "where": {
+            "Name": "OverheadPerPeriod"
+          }
+        }
+      ],
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.45,
+      "ambiguities": [
+        "No new overhead value specified. Please provide the numeric value to update to.",
+        "Ambiguous scope: 'overhead' could refer to the global OverheadPerPeriod (input_parameters) or portfolio-specific Overhead (input_portfolios_config). If portfolio-specific, which portfolio?",
+        "UPDATE operation requires a target value in the fields section."
+      ],
+      "plain_english": "You want to update overhead, but I need two pieces of information: (1) the new overhead value, and (2) clarification on whether this is the global overhead per period or overhead for a specific portfolio."
+    },
+    "score": {
+      "operation": 2,
+      "tables": 1,
+      "fields": 0,
+      "where": 1,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "plain_english": 1,
+      "total": 8,
+      "notes": "Tables: +1 (correct table identified but two possible variants exist\u2014global vs portfolio-specific\u2014and only one was chosen). Fields: 0 (Value is null, incomplete for UPDATE). Where: +1 (correct Name key, but missing portfolio_id if scope is ambiguous). Period_resolution_required: +1 (correct; user gave no label/date). Confidence and ambiguities well-calibrated at 0.45 with comprehensive list. Plain English is clear and actionable."
+    }
+  },
+  {
+    "prompt": "Set the COGS rate to 10%",
+    "response": {
+      "operation": "UPDATE",
+      "tables": [
+        {
+          "name": "input_cogs",
+          "fields": {
+            "CogsRate": 0.1
+          },
+          "where": {
+            "CogsID": null,
+            "PeriodID": null,
+            "PeriodsSinceDeployment": null
+          }
+        }
+      ],
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.35,
+      "ambiguities": [
+        "COGS type not specified: which of PP (Payment Processing), CC (Call Center), O (Other), UW (Underwriting), or MKT (Marketing)?",
+        "Period not specified: which PeriodID should this apply to? Or all periods?",
+        "PeriodsSinceDeployment not specified: assuming 0 (cross-sectional rate at deployment), but this may need clarification."
+      ],
+      "plain_english": "Set a COGS rate to 10%, but the command is missing critical details: which type of COGS (PP/CC/O/UW/MKT), which period(s), and whether this applies at deployment time or across all periods since deployment."
+    },
+    "score": {
+      "operation": 2,
+      "tables": 2,
+      "fields": 1,
+      "where": 0,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "plain_english": 1,
+      "total": 9,
+      "notes": "Strong ambiguity identification and calibration (confidence 0.35 with multiple ambiguities); however, WHERE clause incomplete\u2014CogsID is required PK but left null without explicit marking as missing prerequisite for execution."
+    }
+  },
+  {
+    "prompt": "Fix deployment for C1 in July 2024",
+    "response": {
+      "operation": "INSERT",
+      "tables": [
+        {
+          "name": "input_fix_deployments",
+          "fields": {
+            "CustomerGroupID": "C1",
+            "PeriodID": null,
+            "DeploymentAmount": null
+          },
+          "where": {
+            "CustomerGroupID": "C1",
+            "PeriodID": null
+          }
+        }
+      ],
+      "period_resolution_required": true,
+      "period_label": "2024-07",
+      "confidence": 0.65,
+      "ambiguities": [
+        "PeriodID must be resolved from period_label '2024-07' using input_time_periods lookup.",
+        "DeploymentAmount is required but not specified in the command. Please provide the fixed deployment amount.",
+        "Unclear whether this is a new fix_deployment entry or updating an existing one for C1 in July 2024."
+      ],
+      "plain_english": "Set a fixed deployment amount for customer group C1 in July 2024. The specific deployment amount and exact period(s) in July 2024 need clarification."
+    },
+    "score": {
+      "operation": 2,
+      "tables": 2,
+      "fields": 1,
+      "where": 1,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "plain_english": 1,
+      "total": 10,
+      "notes": "DeploymentAmount field is required but missing (null) and not captured as a field\u2014deducted 1 point. Where clause correctly identifies the key lookup (C1, PeriodID) but PeriodID itself is null pending resolution, so partial credit."
+    }
+  }
+]

@@ -1,0 +1,200 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HiveOptimizerIntent",
+  "description": "Parsed intent from a natural language command for the Hive Global Optimizer.",
+  "type": "object",
+  "required": ["run_params", "sql_mutations", "sql_mutation_reasoning", "period_resolution_required", "confidence", "ambiguities", "plain_english"],
+  "additionalProperties": false,
+
+  "properties": {
+
+    "run_params": {
+      "type": "object",
+      "description": "Parameter block passed directly to the DE_NB_RunModel notebook parameter cell. Always present. Keys match the notebook parameter cell exactly. Use defaults for any field the user has not specified.",
+      "required": [
+        "old_run_id_to_copy", "name", "description", "user",
+        "objective_function", "duration", "overhead_per_period",
+        "mip_gap", "timeout_seconds", "start_period"
+      ],
+      "additionalProperties": false,
+      "properties": {
+
+        "old_run_id_to_copy": {
+          "type": "string",
+          "description": "UUID of the run to clone. Use '<uuid-placeholder>' unless the user explicitly provides a value."
+        },
+
+        "name": {
+          "type": "string",
+          "description": "Display name for this run. Use '<run-name-placeholder>' unless the user explicitly provides a value."
+        },
+
+        "description": {
+          "type": "string",
+          "description": "Human-readable description. Use '<description-placeholder>' unless the user explicitly provides a value."
+        },
+
+        "user": {
+          "type": "string",
+          "description": "Owner email or username. Use '<user-placeholder>' unless the user explicitly provides a value."
+        },
+
+        "objective_function": {
+          "type": "string",
+          "description": "The optimization objective passed to the solver. Default 'Maximize Bank Balance' if not specified by the user."
+        },
+
+        "duration": {
+          "type": ["integer", "null"],
+          "description": "Number of weekly periods to run. Default 1351. null only when period resolution is pending. Convert years/months to periods (1 year = 52 periods) and flag in ambiguities."
+        },
+
+        "overhead_per_period": {
+          "type": ["number", "null"],
+          "description": "Weekly overhead cost in dollars. Default 0. If the user gives an annual figure, divide by 52 and flag the conversion in ambiguities."
+        },
+
+        "mip_gap": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "MIP optimality gap tolerance as a decimal fraction (e.g. 0.001 = 0.1%). Default 0.001."
+        },
+
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum solver wall-clock time in seconds. Default 600."
+        },
+
+        "start_period": {
+          "type": ["integer", "null"],
+          "description": "PeriodID at which the simulation starts. Default 461. null when the user gives a date label — set period_resolution_required: true in that case."
+        }
+      }
+    },
+
+    "sql_mutations": {
+      "type": "array",
+      "description": "Ordered list of executable SQL statements to apply to input tables before running the optimizer. Always present — use [] if no changes are needed. Each string is a complete, ready-to-execute SQL statement using '{run_id}' as the placeholder for the actual RunID. Only UPDATE, INSERT, and DELETE are allowed (no SELECT). Every statement targeting a run-scoped table must include WHERE RunID = '{run_id}'.",
+      "items": {
+        "type": "string",
+        "minLength": 10
+      }
+    },
+
+    "sql_mutation_reasoning": {
+      "type": "string",
+      "minLength": 10,
+      "description": "Explanation of why these sql_mutations were generated (or why sql_mutations is empty). Always present. Covers which table mapping was used, why those column/value/WHERE conditions were chosen, and any value conversions applied. When sql_mutations is [], explain why no table changes are needed."
+    },
+
+    "period_resolution_required": {
+      "type": "boolean",
+      "description": "True when a year-level date (YYYY) was given and the agent cannot resolve it to a PeriodID without a clarifying question. False when the period was given as YYYY-MM-DD (exact week) or YYYY-MM (month — defaults to first week of that month)."
+    },
+
+    "period_label": {
+      "type": ["string", "null"],
+      "pattern": "^\\d{4}(-\\d{2}(-\\d{2})?)?$",
+      "description": "The unresolved period label when period_resolution_required is true. YYYY for year only. null when period_resolution_required is false."
+    },
+
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "0–1 confidence in the parsed intent. Below 0.80 must be accompanied by non-empty ambiguities. Each unresolved required field costs –0.10; each assumption (unit conversion, defaulted value) costs –0.05."
+    },
+
+    "ambiguities": {
+      "type": "array",
+      "description": "List of unresolved questions, assumptions, or unit conversions. Empty array only when confidence >= 0.80 and no clarification is needed.",
+      "items": { "type": "string" }
+    },
+
+    "plain_english": {
+      "type": "string",
+      "description": "One to two sentence human-readable summary of what this intent will do. Always present."
+    }
+  },
+
+  "examples": [
+    {
+      "run_params": {
+        "old_run_id_to_copy": "<uuid-placeholder>",
+        "name": "<run-name-placeholder>",
+        "description": "<description-placeholder>",
+        "user": "<user-placeholder>",
+        "objective_function": "Maximize Bank Balance",
+        "duration": 104,
+        "overhead_per_period": 0,
+        "mip_gap": 0.005,
+        "timeout_seconds": 600,
+        "start_period": 461
+      },
+      "sql_mutations": [],
+      "sql_mutation_reasoning": "No table mutations required — the user only specified run configuration parameters (duration and MIP gap), which are captured entirely in run_params. No input table data needs to change.",
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.90,
+      "ambiguities": [
+        "Duration '2 years' converted to 104 weekly periods (52 × 2). Confirm if correct.",
+        "objective_function not specified; defaulted to 'Maximize Bank Balance'.",
+        "overhead_per_period not specified; defaulted to 0."
+      ],
+      "plain_english": "Run the optimizer from period 461 for 104 periods (~2 years) with a 0.5% MIP gap."
+    },
+    {
+      "run_params": {
+        "old_run_id_to_copy": "<uuid-placeholder>",
+        "name": "<run-name-placeholder>",
+        "description": "<description-placeholder>",
+        "user": "<user-placeholder>",
+        "objective_function": "Maximize Bank Balance",
+        "duration": 1351,
+        "overhead_per_period": 0,
+        "mip_gap": 0.001,
+        "timeout_seconds": 600,
+        "start_period": 461
+      },
+      "sql_mutations": [
+        "UPDATE input_investor_capital\nSET InterestRate = 0.015\nWHERE RunID = '{run_id}'\n  AND InvestorCapitalID = 'Loan1'"
+      ],
+      "sql_mutation_reasoning": "User said 'change interest rate on Loan1 to 1.5%' → mapped to input_investor_capital.InterestRate per the loan/interest-rate table mapping. InvestorCapitalID = 'Loan1' comes directly from the user. Value 1.5% converted to decimal 0.015.",
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.85,
+      "ambiguities": [
+        "RunID not specified — update will apply to whichever run context is active. Confirm target run."
+      ],
+      "plain_english": "Update the interest rate for Loan1 to 1.5% in input_investor_capital, then run the optimizer."
+    },
+    {
+      "run_params": {
+        "old_run_id_to_copy": "<uuid-placeholder>",
+        "name": "<run-name-placeholder>",
+        "description": "<description-placeholder>",
+        "user": "<user-placeholder>",
+        "objective_function": "Maximize Bank Balance",
+        "duration": 1351,
+        "overhead_per_period": 0,
+        "mip_gap": 0.001,
+        "timeout_seconds": 600,
+        "start_period": 461
+      },
+      "sql_mutations": [
+        "UPDATE input_cogs\nSET CogsRate = 0.25\nWHERE RunID = '{run_id}'\n  AND CustomerGroupID = 'C1'\n  AND PeriodID = 85"
+      ],
+      "sql_mutation_reasoning": "User said 'underwriting COGS rate for C1' → mapped to input_cogs.CogsRate per the COGS table mapping. CustomerGroupID = 'C1' comes directly from the user. PeriodID = 85 was specified explicitly. CogsTypeID not specified — defaulted to the most likely underwriting type, flagged in ambiguities.",
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.75,
+      "ambiguities": [
+        "input_cogs has multiple COGS types (longitudinal and cross-sectional). Clarify which CogsTypeID applies to underwriting COGS.",
+        "RunID not specified — confirm which run's input data to update."
+      ],
+      "plain_english": "Update the underwriting COGS rate for customer group C1 in period 85 to 25% in input_cogs, then run the optimizer."
+    }
+  ]
+}

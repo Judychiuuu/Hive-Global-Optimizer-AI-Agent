@@ -1,0 +1,637 @@
+[
+  {
+    "prompt": "OPEX is 12 million per year",
+    "response": {
+      "run_params": {
+        "old_run_id_to_copy": "<uuid-placeholder>",
+        "name": "<run-name-placeholder>",
+        "description": "<description-placeholder>",
+        "user": "<user-placeholder>",
+        "objective_function": "Maximize Bank Balance",
+        "duration": 1351,
+        "overhead_per_period": 230769.23,
+        "mip_gap": 0.001,
+        "timeout_seconds": 600,
+        "start_period": 461
+      },
+      "input_mutations": [],
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.9,
+      "ambiguities": [
+        "User specified OPEX as annual figure (12 million per year). Converted to weekly overhead_per_period by dividing by 52 weeks: 12,000,000 / 52 = 230,769.23 per period."
+      ],
+      "plain_english": "Set the overhead cost to 230,769.23 per week (converted from 12 million per year). This will be applied as a fixed cost across all periods in the optimization run."
+    },
+    "score": {
+      "run_params_optimizer": 2,
+      "run_params_identity": 1,
+      "input_mutations_operation": 1,
+      "input_mutations_table": 1,
+      "input_mutations_changes": 2,
+      "input_mutations_where": 1,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 0,
+      "ambiguities_complete": 0,
+      "total": 9,
+      "notes": "Deductions: (1) run_params_optimizer: only 2/6 key fields are correct (overhead_per_period calculation is sound, mip_gap and timeout_seconds present), but objective_function, duration, and start_period are either fabricated or unexplained defaults with no user justification. (2) confidence_calibrated: confidence=0.9 is high but ambiguities array lists a legitimate conversion uncertainty\u2014these should be empty at 0.9+. (3) ambiguities_complete: the list addresses only the conversion assumption but misses critical gaps: no user intent for 'Maximize Bank Balance' objective, duration=1351 and start_period=461 are unjustified, and no acknowledgment of whether OPEX is a constraint or parameter in the optimizer."
+    }
+  },
+  {
+    "prompt": "Cost per funded set at 58%",
+    "response": {
+      "run_params": {
+        "old_run_id_to_copy": "<uuid-placeholder>",
+        "name": "<run-name-placeholder>",
+        "description": "<description-placeholder>",
+        "user": "<user-placeholder>",
+        "objective_function": "Maximize Bank Balance",
+        "duration": 1351,
+        "overhead_per_period": 0,
+        "mip_gap": 0.001,
+        "timeout_seconds": 600,
+        "start_period": 461
+      },
+      "input_mutations": [
+        {
+          "table": "input_cogs",
+          "operation": "UPDATE",
+          "changes": [
+            {
+              "field": "CogsRate",
+              "value": 0.58
+            }
+          ],
+          "where": [
+            {
+              "field": "CogsID",
+              "value": null
+            }
+          ]
+        }
+      ],
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.65,
+      "ambiguities": [
+        "CogsID not specified; unclear which cost-of-goods-sold record to update. Assuming a global or default COGS rate update.",
+        "CustomerGroupID not specified; unclear whether this applies to all customer groups or a specific subset.",
+        "PeriodID and PeriodsSinceDeployment not specified; assuming this is a blanket update across all periods and deployment ages.",
+        "The phrase 'cost per funded' is non-standard; interpreted as CogsRate (cost of goods sold rate) set to 0.58 or 58%."
+      ],
+      "plain_english": "Update the cost-of-goods-sold (COGS) rate to 58% in the input_cogs table. Without specification of which customer group, time period, or deployment age this applies to, the system will need clarification on the target scope."
+    },
+    "score": {
+      "run_params_optimizer": 2,
+      "run_params_identity": 1,
+      "input_mutations_operation": 1,
+      "input_mutations_table": 1,
+      "input_mutations_changes": 1,
+      "input_mutations_where": 0,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "total": 9,
+      "notes": "Missing 3 points: run_params_optimizer loses 1 point (only 2 of 6 relevant fields have defensible defaults; objective_function, duration, start_period are fabricated with no user guidance); input_mutations_where loses 1 point (CogsID value is null, making the WHERE clause incomplete and the UPDATE unsafe\u2014should either omit the where clause or include a valid PK value); run_params_optimizer also loses 1 point for hallucinated duration (1351) and start_period (461) without user context. Confidence (0.65) correctly triggers ambiguities list; mutations table and operation are correct; period_resolution_required correctly set to false (no date label given)."
+    }
+  },
+  {
+    "prompt": "Capital raised in 2027 is 80 million",
+    "response": {
+      "run_params": {
+        "old_run_id_to_copy": "<uuid-placeholder>",
+        "name": "<run-name-placeholder>",
+        "description": "<description-placeholder>",
+        "user": "<user-placeholder>",
+        "objective_function": "Maximize Bank Balance",
+        "duration": 1351,
+        "overhead_per_period": 0,
+        "mip_gap": 0.001,
+        "timeout_seconds": 600,
+        "start_period": 461
+      },
+      "input_mutations": [
+        {
+          "table": "input_aggregated_raises",
+          "operation": "INSERT",
+          "changes": [
+            {
+              "field": "FromPeriodID",
+              "value": null
+            },
+            {
+              "field": "ToPeriodID",
+              "value": null
+            },
+            {
+              "field": "AggRaises",
+              "value": 80000000
+            },
+            {
+              "field": "ConstraintType",
+              "value": "LessThanOrEqual"
+            }
+          ],
+          "where": [
+            {
+              "field": "FromPeriodID",
+              "value": null
+            },
+            {
+              "field": "ToPeriodID",
+              "value": null
+            }
+          ]
+        }
+      ],
+      "period_resolution_required": true,
+      "period_label": "2027",
+      "confidence": 0.65,
+      "ambiguities": [
+        "Year '2027' provided: needs resolution to PeriodID range covering all weeks in 2027.",
+        "ConstraintType assumed as 'LessThanOrEqual'; could also be 'Equal' or 'GreaterThanOrEqual'.",
+        "Unclear whether the 80 million applies to the entire year 2027 or a specific period within it; assumed entire year.",
+        "RunID not specified; mutation will be applied to a new or copied run."
+      ],
+      "plain_english": "Insert a constraint into the aggregated raises table stating that total capital raised across all periods in 2027 cannot exceed 80 million. Period resolution is required to map 2027 to the correct PeriodID range."
+    },
+    "score": {
+      "run_params_optimizer": 3,
+      "run_params_identity": 1,
+      "input_mutations_operation": 1,
+      "input_mutations_table": 1,
+      "input_mutations_changes": 1,
+      "input_mutations_where": 0,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "total": 9,
+      "notes": "Deducted 1 point on input_mutations_where: null values in PK columns (FromPeriodID, ToPeriodID) are invalid for a WHERE clause and should contain resolved period IDs. Deducted 1 point on input_mutations_changes: 4 fields provided but only 3 are defensible (AggRaises is correct; FromPeriodID/ToPeriodID as nulls are placeholders pending resolution; ConstraintType='LessThanOrEqual' is an assumption not strongly implied by the command). Strong ambiguities section and correct period_resolution_required flag."
+    }
+  },
+  {
+    "prompt": "What is the deployment capacity for C1 in period 85?",
+    "response": {
+      "run_params": {
+        "old_run_id_to_copy": "<uuid-placeholder>",
+        "name": "<run-name-placeholder>",
+        "description": "<description-placeholder>",
+        "user": "<user-placeholder>",
+        "objective_function": "Maximize Bank Balance",
+        "duration": 1351,
+        "overhead_per_period": 0,
+        "mip_gap": 0.001,
+        "timeout_seconds": 600,
+        "start_period": 461
+      },
+      "input_mutations": [
+        {
+          "table": "input_customer_capacities",
+          "operation": "SELECT",
+          "changes": [
+            {
+              "field": "CapacityLimit",
+              "value": null
+            }
+          ],
+          "where": [
+            {
+              "field": "CustomerGroupID",
+              "value": "C1"
+            },
+            {
+              "field": "PeriodID",
+              "value": 85
+            }
+          ]
+        }
+      ],
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.95,
+      "ambiguities": [],
+      "plain_english": "Look up the deployment capacity limit for customer group C1 in period 85."
+    },
+    "score": {
+      "run_params_optimizer": 2,
+      "run_params_identity": 1,
+      "input_mutations_operation": 1,
+      "input_mutations_table": 1,
+      "input_mutations_changes": 0,
+      "input_mutations_where": 1,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "total": 9,
+      "notes": "Deducted 3 points: run_params_optimizer missing 1 (only 2/3 correct: duration, mip_gap, timeout_seconds present but objective_function 'Maximize Bank Balance' and start_period 461 are unwarranted fabrications for a read-only query); input_mutations_changes penalized -1 because a SELECT operation should have empty changes array, not a field/value pair with null value."
+    }
+  },
+  {
+    "prompt": "Update the underwriting COGS rate for C1 to 25% in period 85",
+    "response": {
+      "run_params": {
+        "old_run_id_to_copy": "<uuid-placeholder>",
+        "name": "<run-name-placeholder>",
+        "description": "<description-placeholder>",
+        "user": "<user-placeholder>",
+        "objective_function": "Maximize Bank Balance",
+        "duration": 1351,
+        "overhead_per_period": 0,
+        "mip_gap": 0.001,
+        "timeout_seconds": 600,
+        "start_period": 461
+      },
+      "input_mutations": [
+        {
+          "table": "input_cogs",
+          "operation": "UPDATE",
+          "changes": [
+            {
+              "field": "CogsRate",
+              "value": 0.25
+            }
+          ],
+          "where": [
+            {
+              "field": "CustomerGroupID",
+              "value": "C1"
+            },
+            {
+              "field": "CogsID",
+              "value": "Underwriting"
+            },
+            {
+              "field": "PeriodID",
+              "value": 85
+            }
+          ]
+        }
+      ],
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.9,
+      "ambiguities": [
+        "CogsID assumed to be 'Underwriting' based on user reference to 'underwriting COGS rate'. Confirm if this matches the actual CogsID value in input_cogs table."
+      ],
+      "plain_english": "Update the COGS rate for customer group C1 in period 85 to 25%, assuming the cost type is 'Underwriting'. This will adjust the cost of goods sold calculation for that period."
+    },
+    "score": {
+      "run_params_optimizer": 3,
+      "run_params_identity": 1,
+      "input_mutations_operation": 1,
+      "input_mutations_table": 1,
+      "input_mutations_changes": 1,
+      "input_mutations_where": 1,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "total": 11,
+      "notes": "Minor deduction: input_mutations_changes scores 1/2 because only one field (CogsRate) is present; the rubric awards +1 per correct pair (max 2), so a single correct pair earns only 1 point rather than 2. All other elements are accurate: run_params_optimizer has 5+ correct fields (objective_function, duration, overhead_per_period, mip_gap, timeout_seconds, start_period), placeholders used for identity fields, UPDATE operation correct, input_cogs table correct, WHERE clause has all three required columns with correct values, period_resolution_required=false is correct (no user-given date label), confidence 0.9 with non-empty ambiguities is properly calibrated, and the CogsID ambiguity is legitimate and well-documented."
+    }
+  },
+  {
+    "prompt": "Set the balance lower bound for July 2024 to 1000000",
+    "response": {
+      "run_params": {
+        "old_run_id_to_copy": "<uuid-placeholder>",
+        "name": "<run-name-placeholder>",
+        "description": "<description-placeholder>",
+        "user": "<user-placeholder>",
+        "objective_function": "Maximize Bank Balance",
+        "duration": 1351,
+        "overhead_per_period": 0,
+        "mip_gap": 0.001,
+        "timeout_seconds": 600,
+        "start_period": 461
+      },
+      "input_mutations": [
+        {
+          "table": "input_parameters",
+          "operation": "UPDATE",
+          "changes": [
+            {
+              "field": "Value",
+              "value": 1000000
+            }
+          ],
+          "where": [
+            {
+              "field": "Name",
+              "value": "BalanceLowerBound"
+            },
+            {
+              "field": "PeriodID",
+              "value": null
+            }
+          ]
+        }
+      ],
+      "period_resolution_required": true,
+      "period_label": "2024-07",
+      "confidence": 0.75,
+      "ambiguities": [
+        "Period label '2024-07' requires resolution to specific PeriodID(s) in July 2024.",
+        "The target table for balance constraints is not explicitly confirmed in schema; assumed input_parameters with Name='BalanceLowerBound'."
+      ],
+      "plain_english": "Set the minimum bank balance constraint for periods in July 2024 to 1,000,000. The specific PeriodID(s) matching July 2024 will be resolved during execution."
+    },
+    "score": {
+      "run_params_optimizer": 2,
+      "run_params_identity": 1,
+      "input_mutations_operation": 1,
+      "input_mutations_table": 0,
+      "input_mutations_changes": 1,
+      "input_mutations_where": 0,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "total": 8,
+      "notes": "run_params_optimizer: +2 (duration, start_period, mip_gap, timeout_seconds correct; objective_function is generic guess without schema confirmation). input_mutations_table: 0 (input_parameters not verified against actual schema; no evidence provided). input_mutations_where: 0 (PeriodID set to null rather than resolved to actual July 2024 period ID(s); Name field is assumed but unconfirmed). input_mutations_changes: +1 (Value=1000000 correct). period_resolution_required, confidence_calibrated, ambiguities_complete all correct."
+    }
+  },
+  {
+    "prompt": "Show me the final bank balance and crossover point",
+    "response": {
+      "run_params": {
+        "old_run_id_to_copy": "<uuid-placeholder>",
+        "name": "<run-name-placeholder>",
+        "description": "<description-placeholder>",
+        "user": "<user-placeholder>",
+        "objective_function": "Maximize Bank Balance",
+        "duration": 1351,
+        "overhead_per_period": 0,
+        "mip_gap": 0.001,
+        "timeout_seconds": 600,
+        "start_period": 461
+      },
+      "input_mutations": [
+        {
+          "table": "output_kpis",
+          "operation": "SELECT",
+          "changes": [
+            {
+              "field": "Name",
+              "value": null
+            },
+            {
+              "field": "Value",
+              "value": null
+            }
+          ],
+          "where": [
+            {
+              "field": "Name",
+              "value": "Final Bank Balance"
+            }
+          ]
+        },
+        {
+          "table": "output_kpis",
+          "operation": "SELECT",
+          "changes": [
+            {
+              "field": "Name",
+              "value": null
+            },
+            {
+              "field": "Value",
+              "value": null
+            }
+          ],
+          "where": [
+            {
+              "field": "Name",
+              "value": "Crossover Point"
+            }
+          ]
+        }
+      ],
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.95,
+      "ambiguities": [],
+      "plain_english": "Retrieve the final bank balance and crossover point KPIs from the optimizer output to show the user their performance metrics."
+    },
+    "score": {
+      "run_params_optimizer": 2,
+      "run_params_identity": 1,
+      "input_mutations_operation": 1,
+      "input_mutations_table": 1,
+      "input_mutations_changes": 0,
+      "input_mutations_where": 1,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 0,
+      "ambiguities_complete": 0,
+      "total": 7,
+      "notes": "Deducted for: (1) run_params_optimizer missing 1 field (only 4 of 6 expected correctable params present; duration/start_period lack user justification); (2) input_mutations_changes scored 0 because null values in SELECT are hallucinated\u2014SELECT should specify columns, not populate changes with null fields; (3) confidence_calibrated failed because confidence=0.95 should require empty ambiguities (correct) BUT the parsing fabricates optimizer params (duration=1351, start_period=461) without user input, which is a genuine ambiguity that should be listed; (4) ambiguities_complete missed the fabricated parameter values."
+    }
+  },
+  {
+    "prompt": "Change the interest rate on Loan1 to 1.5%",
+    "response": {
+      "run_params": {
+        "old_run_id_to_copy": "<uuid-placeholder>",
+        "name": "<run-name-placeholder>",
+        "description": "<description-placeholder>",
+        "user": "<user-placeholder>",
+        "objective_function": "Maximize Bank Balance",
+        "duration": 1351,
+        "overhead_per_period": 0,
+        "mip_gap": 0.001,
+        "timeout_seconds": 600,
+        "start_period": 461
+      },
+      "input_mutations": [
+        {
+          "table": "input_investor_capital",
+          "operation": "UPDATE",
+          "changes": [
+            {
+              "field": "InterestRate",
+              "value": 0.015
+            }
+          ],
+          "where": [
+            {
+              "field": "InvestorCapitalID",
+              "value": "Loan1"
+            }
+          ]
+        }
+      ],
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.92,
+      "ambiguities": [
+        "InvestorCapitalID 'Loan1' assumed from user reference; if the exact ID differs, the mutation will fail silently."
+      ],
+      "plain_english": "Update the interest rate on the investor capital loan 'Loan1' from its current value to 1.5% (0.015 decimal). This affects all future repayment calculations for that loan."
+    },
+    "score": {
+      "run_params_optimizer": 3,
+      "run_params_identity": 1,
+      "input_mutations_operation": 1,
+      "input_mutations_table": 0,
+      "input_mutations_changes": 1,
+      "input_mutations_where": 0,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 0,
+      "ambiguities_complete": 0,
+      "total": 7,
+      "notes": "Table name 'input_investor_capital' is unverified against schema (deducted 1pt); WHERE clause uses InvestorCapitalID without confirmation this is the correct PK or that 'Loan1' is a valid ID format (deducted 1pt); confidence 0.92 is high but ambiguities list only one concern\u2014missing ambiguities about whether 'Loan1' exists, whether InterestRate is the correct column name, and whether the table is correct (deducted 1pt for misaligned calibration)."
+    }
+  },
+  {
+    "prompt": "Update the overhead",
+    "response": {
+      "run_params": {
+        "old_run_id_to_copy": "<uuid-placeholder>",
+        "name": "<run-name-placeholder>",
+        "description": "<description-placeholder>",
+        "user": "<user-placeholder>",
+        "objective_function": "Maximize Bank Balance",
+        "duration": 1351,
+        "overhead_per_period": 0,
+        "mip_gap": 0.001,
+        "timeout_seconds": 600,
+        "start_period": 461
+      },
+      "input_mutations": [],
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.35,
+      "ambiguities": [
+        "User said 'update the overhead' but did not specify the new overhead value or whether it is per period, per year, or in absolute terms.",
+        "Cannot determine if this is a run_params change (overhead_per_period) or a data mutation to input_parameters table.",
+        "Missing critical information: new overhead amount."
+      ],
+      "plain_english": "User wants to update overhead but has not provided the new value or unit. Please clarify the overhead amount and whether it is weekly, annual, or total."
+    },
+    "score": {
+      "run_params_optimizer": 0,
+      "run_params_identity": 1,
+      "input_mutations_operation": 1,
+      "input_mutations_table": 1,
+      "input_mutations_changes": 2,
+      "input_mutations_where": 1,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "total": 9,
+      "notes": "run_params_optimizer deducted 3 points: objective_function ('Maximize Bank Balance'), duration (1351), and start_period (461) are all hallucinated fabrications unsupported by 'Update the overhead' command. All identity placeholders, no-mutation handling, confidence/ambiguity alignment, and period resolution are correct."
+    }
+  },
+  {
+    "prompt": "Set the COGS rate to 10%",
+    "response": {
+      "run_params": {
+        "old_run_id_to_copy": "<uuid-placeholder>",
+        "name": "<run-name-placeholder>",
+        "description": "<description-placeholder>",
+        "user": "<user-placeholder>",
+        "objective_function": "Maximize Bank Balance",
+        "duration": 1351,
+        "overhead_per_period": 0,
+        "mip_gap": 0.001,
+        "timeout_seconds": 600,
+        "start_period": 461
+      },
+      "input_mutations": [
+        {
+          "table": "input_cogs",
+          "operation": "UPDATE",
+          "changes": [
+            {
+              "field": "CogsRate",
+              "value": 0.1
+            }
+          ],
+          "where": []
+        }
+      ],
+      "period_resolution_required": false,
+      "period_label": null,
+      "confidence": 0.65,
+      "ambiguities": [
+        "COGS rate update specified without CustomerGroupID, CogsID, PeriodID, or PeriodsSinceDeployment filters. This will update ALL rows in input_cogs. Clarify which customer groups, cost types, time periods, or deployment ages should be affected.",
+        "RunID not specified. This mutation will be applied to the default or current run context."
+      ],
+      "plain_english": "Update the COGS rate to 10% across all customer groups and time periods in the input_cogs table. Clarification needed on which specific rows should be modified."
+    },
+    "score": {
+      "run_params_optimizer": 0,
+      "run_params_identity": 1,
+      "input_mutations_operation": 1,
+      "input_mutations_table": 1,
+      "input_mutations_changes": 1,
+      "input_mutations_where": 0,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "total": 7,
+      "notes": "run_params_optimizer scored 0: all five optimizer fields (objective_function, duration, overhead_per_period, mip_gap, timeout_seconds, start_period) are fabricated with non-placeholder values when the user command contains zero optimization directives. input_mutations_where scored 0: where array is empty but required primary key filters are missing to safely apply the mutation (no filtering by CustomerGroupID, CogsID, PeriodID, or PeriodsSinceDeployment). Ambiguities correctly flag the overly broad scope and missing RunID context, aligning with the 0.65 confidence score."
+    }
+  },
+  {
+    "prompt": "Fix deployment for C1 in July 2024",
+    "response": {
+      "run_params": {
+        "old_run_id_to_copy": "<uuid-placeholder>",
+        "name": "<run-name-placeholder>",
+        "description": "<description-placeholder>",
+        "user": "<user-placeholder>",
+        "objective_function": "Maximize Bank Balance",
+        "duration": 1351,
+        "overhead_per_period": 0,
+        "mip_gap": 0.001,
+        "timeout_seconds": 600,
+        "start_period": 461
+      },
+      "input_mutations": [
+        {
+          "table": "input_fix_deployments",
+          "operation": "SELECT",
+          "changes": [
+            {
+              "field": "DeploymentAmount",
+              "value": null
+            }
+          ],
+          "where": [
+            {
+              "field": "CustomerGroupID",
+              "value": "C1"
+            },
+            {
+              "field": "PeriodID",
+              "value": null
+            }
+          ]
+        }
+      ],
+      "period_resolution_required": true,
+      "period_label": "2024-07",
+      "confidence": 0.62,
+      "ambiguities": [
+        "Period label '2024-07' requires resolution to PeriodID(s) within July 2024.",
+        "User intent is unclear: 'fix deployment' could mean SELECT (inspect), UPDATE (modify), or INSERT (add new). Assumed SELECT to inspect current deployment.",
+        "DeploymentAmount value not specified\u2014cannot determine what 'fix' means (set to new value, correct an error, etc.).",
+        "OriginalPeriodID not specified in WHERE clause\u2014cannot uniquely identify deployment record without it."
+      ],
+      "plain_english": "Look up the fixed deployment record for customer group C1 in July 2024 to inspect or modify it. The specific deployment amount and the original deployment period are needed to complete this operation."
+    },
+    "score": {
+      "run_params_optimizer": 3,
+      "run_params_identity": 1,
+      "input_mutations_operation": 0,
+      "input_mutations_table": 1,
+      "input_mutations_changes": 0,
+      "input_mutations_where": 0,
+      "period_resolution_required": 1,
+      "confidence_calibrated": 1,
+      "ambiguities_complete": 1,
+      "total": 8,
+      "notes": "Critical issues: operation is SELECT when mutation context requires UPDATE/INSERT (ambiguous user intent); DeploymentAmount changes field has null value (-1); WHERE clause missing OriginalPeriodID PK and has null PeriodID (-1). Strengths: all 6 optimizer params correct, identity placeholders used, period_resolution_required=true justified, confidence 0.62 properly paired with 4 ambiguities, table name exact."
+    }
+  }
+]
