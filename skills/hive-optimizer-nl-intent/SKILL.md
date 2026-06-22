@@ -63,10 +63,10 @@ Use defaults for any field the user has not explicitly provided.
 | `user` | string (email / username) | `"<user-placeholder>"` |
 | `objective_function` | string | `"Maximize Bank Balance"` |
 | `duration` | integer | `1351` |
-| `overhead_per_period` | number | `0` |
+| `overhead_per_period` | number | `0` — **always 0; never modified from user input** (overhead goes to `input_portfolios_config.Overhead` via SQL mutation) |
 | `mip_gap` | number | `0.001` |
 | `timeout_seconds` | integer | `600` |
-| `start_period` | integer | `461` |
+| `start_period` | integer | **No silent default — ask if not specified** (see Ambiguity Rules) |
 
 ### User command → `run_params` field mapping
 
@@ -74,10 +74,10 @@ Use defaults for any field the user has not explicitly provided.
 |---|---|---|
 | "start period 461" / "starting period 461" | `start_period` | Integer PeriodID |
 | "starting in July 2024" / "start from 2024-07" | `start_period: null` + `period_resolution_required: true` | Label needs PeriodID lookup — see Period Resolution |
+| start period **not specified** | `start_period: null` + flag in `ambiguities` | Always ask — see Ambiguity Rules |
 | "run for X weeks/periods" / "duration X" | `duration` | Integer |
 | "run for 2 years" | `duration: 104` | 52 weeks × 2; flag conversion in `ambiguities` |
-| "OPEX / overhead is X per year" | `overhead_per_period: X / 52` | Flag annual→weekly in `ambiguities`; ask if user wants to confirm unit |
-| "overhead per week / per period is X" | `overhead_per_period: X` | Direct, no conversion |
+| "OPEX", "overhead", "fixed expenses" | *(not a run_params field)* | → Generate SQL mutation on `input_portfolios_config.Overhead` in Step 3. Never set `overhead_per_period`. |
 | "MIP gap / optimality gap / tolerance X%" | `mip_gap: X / 100` | Convert % to decimal |
 | "timeout X seconds/minutes" | `timeout_seconds` | Convert minutes to seconds if needed |
 | "maximize bank balance / maximize profit" | `objective_function` | Derive string from context |
@@ -127,19 +127,33 @@ WHERE RunID = '{run_id}'
 
 ### Table mapping — common intents to tables
 
-| User references | Table | PK fields for WHERE |
-|---|---|---|
-| loan interest rate, loan terms, principal, repayment | `input_investor_capital` | `InvestorCapitalID` |
-| repayment schedule, payment obligation | `input_investor_repayment_schedule` | `InvestorCapitalID`, `PeriodID`, `PaymentType` |
-| COGS rate, cost of goods sold, underwriting cost | `input_cogs` | `CustomerGroupID`, `CogsTypeID`, `PeriodID`, `PeriodsSinceDeployment` |
-| deployment capacity, capacity limit | `input_customer_capacities` | `CustomerGroupID`, `PeriodID` |
-| performance curves, return rate, repeat return | `input_performance_curves` | `CustomerGroupID`, `PeriodID`, `PeriodsSinceDeployment` |
-| fixed deployment, committed deployment | `input_fix_deployments` | `CustomerGroupID`, `OriginalPeriodID`, `PeriodID`, `IsRepeat` |
-| fixed raise, committed raise | `input_fix_raises` | `InvestorCapitalID`, `PeriodID` |
-| aggregated raise constraint | `input_aggregated_raises` | `FromPeriodID`, `ToPeriodID`, `ConstraintType` |
-| aggregated deployment constraint | `input_aggregated_deployments` | `FromPeriodID`, `ToPeriodID` |
-| time periods, period label, calendar date | `input_time_periods` | `PeriodID` |
-| optimizer parameters, start balance, objective | `input_parameters` | `Name` |
+| User references | Table | PK fields for WHERE | Notes |
+|---|---|---|---|
+| loan interest rate, loan terms, principal, repayment | `input_investor_capital` | `InvestorCapitalID` | |
+| repayment schedule, payment obligation | `input_investor_repayment_schedule` | `InvestorCapitalID`, `PeriodID`, `PaymentType` | |
+| COGS rate, cost of goods sold, underwriting cost | `input_cogs` | `CustomerGroupID`, `CogsID`, `PeriodID`, `PeriodsSinceDeployment` | Default `CogsID = 'ALL'`; see COGS rules below |
+| OPEX, overhead, fixed operating expenses | `input_portfolios_config` | `PortfolioID`, `PeriodID` | Field: `Overhead`; see schema_reference.md §input_portfolios_config |
+| deployment capacity, capacity limit | `input_customer_capacities` | `CustomerGroupID`, `PeriodID` | |
+| performance curves, return rate, repeat return | `input_performance_curves` | `CustomerGroupID`, `PeriodID`, `PeriodsSinceDeployment` | |
+| unit margin | *both `input_performance_curves` and `input_cogs`* | — | See Derived Concepts section |
+| fixed deployment, committed deployment | `input_fix_deployments` | `CustomerGroupID`, `OriginalPeriodID`, `PeriodID`, `IsRepeat` | |
+| fixed raise, exact capital raise amount | `input_fix_raises` | `InvestorCapitalID`, `PeriodID` | No RunID (reference table); field: `Quantity` |
+| capital raise upper bound constraint | `input_aggregated_raises` | `FromPeriodID`, `ToPeriodID`, `ConstraintType` | Always ask: exact or upper bound? See Special mutations |
+| aggregated deployment constraint | `input_aggregated_deployments` | `FromPeriodID`, `ToPeriodID` | |
+| time periods, period label, calendar date | `input_time_periods` | `PeriodID` | |
+| optimizer parameters, start balance, objective | `input_parameters` | `Name` | |
+
+### COGS rules
+
+**CogsID default:** When the user does not specify a COGS type, use `CogsID = 'ALL'` in the WHERE clause — no clarification needed.
+
+**COGS type clarification (when user mentions a specific type):** If the user says a specific COGS type (e.g., "underwriting", "payment processing"), ask which type using human-readable names, then resolve to `CogsID` by looking up `input_cogs_types`. Do not ask if no type is mentioned.
+
+**Customer group rule:**
+- If there is only **one customer group**, apply the COGS mutation for that group without asking.
+- If there are **multiple customer groups** and none is specified, add an ambiguity question: "Should this COGS change apply to all customer groups equally, or do you want to set different values by group? If different, please specify each group and its value."
+
+---
 
 ### Populate `sql_mutation_reasoning` (always required)
 
@@ -149,8 +163,11 @@ After writing `sql_mutations`, populate `sql_mutation_reasoning` with a one-to-t
 
 | User says | Table | Notes |
 |---|---|---|
-| "scale performance curves from period X to Y by Z%" | `input_performance_curves` | Generate an UPDATE for each affected row range; multiply `ReturnRate` and `RepeatReturnRate` by `(1 - Z/100)`; flag scale factor in `ambiguities` |
-| "capital raised from period X to Y is Z" | `input_aggregated_raises` | INSERT with `FromPeriodID`, `ToPeriodID`, `AggRaises`, `ConstraintType = 'LessThanOrEqualTo'`; flag if `ConstraintType` is ambiguous |
+| "scale performance curves from period X to Y by Z%" | `input_performance_curves` | UPDATE multiplying `ReturnRate` and `RepeatReturnRate` by `(1 - Z/100)`; flag scale factor in `ambiguities` |
+| capital raise — **exact amount** (optimizer must raise exactly this) | `input_fix_raises` | UPDATE/INSERT `Quantity`; PK is `InvestorCapitalID + PeriodID`; **no RunID** (reference table) |
+| capital raise — **upper bound** (optimizer may raise up to this) | `input_aggregated_raises` | INSERT/UPDATE `AggRaises` with `ConstraintType = 'LessThanOrEqual'`; PK includes RunID |
+| capital raise — **intent not stated** | *(no SQL yet)* | Always ask: "Is this an exact fixed amount the optimizer must raise, or an upper bound it may raise up to?" before generating SQL |
+| "set OPEX / overhead to X" | `input_portfolios_config` | UPDATE `Overhead`; can target all periods (`PeriodID BETWEEN start AND end`) or a specific period; ask if period-level or portfolio-level |
 
 ---
 
@@ -168,6 +185,15 @@ After writing `sql_mutations`, populate `sql_mutation_reasoning` with a one-to-t
 
 **Period floor rule**: if a date falls between two PeriodLabels, take the smaller
 PeriodID — that is the week containing the date.
+
+**`input_periods_config` lookup**: When a user provides a datetime (any format), you can also look up the matching PeriodID directly from `input_periods_config`:
+```sql
+SELECT PeriodID FROM input_periods_config
+WHERE RunID = '{run_id}'
+  AND PeriodLabel = '<user-provided-datetime>'
+LIMIT 1
+```
+Use this pattern when the user provides an exact label that matches `input_periods_config.PeriodLabel`.
 
 ---
 
@@ -191,26 +217,49 @@ Each choice produces different `sql_mutations`:
 
 Record the distribution choice in `plain_english` and flag it in `ambiguities` until confirmed.
 
-This replaces the old blanket annual ÷ 52 rule for table mutations (that rule still applies
-for `overhead_per_period` in `run_params` when the user says "per year").
+This applies to all table mutations involving numeric values without an explicit time unit.
+
+---
+
+## Derived Concepts
+
+### Unit Margin
+
+**Definition:** `unit margin = vintage return − COGS − 1`
+
+| Component | Table | Field (new customers) | Field (repeat customers) |
+|---|---|---|---|
+| Vintage return | `input_performance_curves` | `ReturnRate` | `RepeatReturnRate` |
+| COGS | `input_cogs` | `CogsRate` | `RepeatCogsRate` |
+
+**When a user asks to modify unit margin:**
+1. **Do NOT generate any SQL.** Set `sql_mutations: []` and `confidence < 0.80`.
+2. Ask all of the following as separate items in `ambiguities`:
+   - "What value should vintage return (`ReturnRate` / `RepeatReturnRate`) be set to?"
+   - "What value should COGS (`CogsRate` / `RepeatCogsRate`) be set to? (These two values must satisfy: vintage return − COGS − 1 = requested unit margin.)"
+   - "Is this margin for new customers (non-repeats), repeat customers, or a blended average of both?"
+3. Only generate SQL once the user has provided specific values for both vintage return and COGS.
 
 ---
 
 ## Ambiguity Rules
 
+**Format:** Each entry in `ambiguities[]` must be a single plain question or note — no leading number prefix. Separate each ambiguity into its own item — do not combine multiple questions in one string.
+
 Populate `ambiguities[]` and set `confidence < 0.80` when any of these apply:
 
+- **Start period not specified** — always ask: "What start period should the scenario apply from? (Provide a PeriodID integer, or a date/month — I'll look it up in `input_periods_config.PeriodLabel`.)" Do not silently default to 461.
 - **Value time unit missing** — user gives a number without specifying weekly/monthly/yearly
   for a table mutation. Ask the clarifying question above.
-- **`overhead_per_period`** — user gives an annual figure → divide by 52, flag conversion.
 - **Year-level period** — user gives only a year → set `period_resolution_required: true`
   and ask which month.
 - **Performance curve scale** — given as "20%" → note `ReturnRate` and `RepeatReturnRate`
   multiplied by 0.8; flag the conversion.
 - **`duration` in years/months** → convert to weekly periods and flag.
 - **`objective_function` not specified** → default to `"Maximize Bank Balance"` and note it.
-- **Ambiguous table** — user's phrasing maps to multiple tables (e.g. "COGS" could be
-  longitudinal or cross-sectional) → flag, pick most likely, note in `ambiguities`.
+- **COGS type** — `CogsID` defaults to `'ALL'`; no clarification needed unless the user explicitly references a specific COGS type (e.g. "underwriting", "payment processing"). If a type is mentioned, ask: "Which COGS type? Options: Payment Processing, Call Center, Other (Longitudinal); Underwriting, Marketing (CrossSectional)." Then resolve to `CogsID` via `input_cogs_types`.
+- **Capital raise — exact vs upper bound** — always ask before generating SQL: "Should this capital raise be an exact fixed amount (optimizer must raise exactly this), or an upper bound (optimizer may raise up to this)?" Exact → `input_fix_raises.Quantity`; upper bound → `input_aggregated_raises.AggRaises` with `ConstraintType = 'LessThanOrEqual'`.
+- **Unit margin modification** — never generate SQL directly; ask for vintage return value, COGS value, and whether it applies to new customers, repeat customers, or both. See Derived Concepts section.
 
 ---
 
@@ -304,22 +353,25 @@ Populate `ambiguities[]` and set `confidence < 0.80` when any of these apply:
     "user": "<user-placeholder>",
     "objective_function": "Maximize Bank Balance",
     "duration": 1351,
-    "overhead_per_period": 230769.23,
+    "overhead_per_period": 0,
     "mip_gap": 0.001,
     "timeout_seconds": 600,
     "start_period": 461
   },
-  "sql_mutations": [],
-  "sql_mutation_reasoning": "No table mutations required — the user only adjusted run configuration (OPEX overhead), which maps to run_params.overhead_per_period. No input table data needs to change.",
+  "sql_mutations": [
+    "UPDATE input_portfolios_config\nSET Overhead = 230769.23\nWHERE RunID = '{run_id}'\n  AND PeriodID BETWEEN 461 AND (461 + 1351)"
+  ],
+  "sql_mutation_reasoning": "User said 'OPEX is 12 million per year' → overhead goes to input_portfolios_config.Overhead (not run_params.overhead_per_period, which stays 0). Annual $12M converted to weekly: 12,000,000 / 52 ≈ 230,769.23. Applied across all periods in the run range.",
   "period_resolution_required": false,
   "period_label": null,
-  "confidence": 0.80,
+  "confidence": 0.75,
   "ambiguities": [
-    "Annual OPEX of $12M converted to weekly overhead: 12,000,000 / 52 ≈ 230,769.23 per period. Confirm this unit conversion.",
+    "Annual OPEX of $12M converted to weekly: 12,000,000 / 52 ≈ 230,769.23 per period. Confirm this unit conversion.",
+    "Applied Overhead to all periods from 461 to 461+duration. Let me know if you intended a specific period range.",
     "duration not specified; defaulted to 1351.",
     "objective_function not specified; defaulted to 'Maximize Bank Balance'."
   ],
-  "plain_english": "Set the weekly overhead to ~$230,769 (converted from $12M annual OPEX) and start from period 461."
+  "plain_english": "Set the weekly overhead in input_portfolios_config to ~$230,769 (converted from $12M annual OPEX) for all periods starting at period 461."
 }
 ```
 

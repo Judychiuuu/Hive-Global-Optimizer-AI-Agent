@@ -47,4 +47,6 @@ WHERE RunID = '{run_id}'
 ```
 
 ## Ambiguity note
-When user says "COGS rate" without specifying a CogsTypeID, ask: "Which COGS type? (Underwriting, Marketing, Payment Processing, Call Center, Other)"
+- **CogsID default:** When no COGS type is specified, use `CogsID = 'ALL'` in the WHERE clause — no clarification needed.
+- **When user specifies a type:** Ask "Which COGS type? (Payment Processing, Call Center, Other — Longitudinal; Underwriting, Marketing — CrossSectional)" using human-readable names. Then look up the corresponding `CogsID` from `input_cogs_types`.
+- **Customer group:** If one customer group exists, apply mutation for that group. If multiple groups exist and none is specified, ask how to differentiate by group.
