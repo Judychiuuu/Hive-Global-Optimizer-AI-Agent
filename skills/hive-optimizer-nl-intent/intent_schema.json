@@ -3,76 +3,10 @@
   "title": "HiveOptimizerIntent",
   "description": "Parsed intent from a natural language command for the Hive Global Optimizer.",
   "type": "object",
-  "required": ["run_params", "sql_mutations", "sql_mutation_reasoning", "period_resolution_required", "confidence", "ambiguities", "plain_english"],
+  "required": ["sql_mutations", "sql_mutation_reasoning", "period_resolution_required", "confidence", "ambiguities", "plain_english"],
   "additionalProperties": false,
 
   "properties": {
-
-    "run_params": {
-      "type": "object",
-      "description": "Parameter block passed directly to the DE_NB_RunModel notebook parameter cell. Always present. Keys match the notebook parameter cell exactly. Use defaults for any field the user has not specified.",
-      "required": [
-        "old_run_id_to_copy", "name", "description", "user",
-        "objective_function", "duration", "overhead_per_period",
-        "mip_gap", "timeout_seconds", "start_period"
-      ],
-      "additionalProperties": false,
-      "properties": {
-
-        "old_run_id_to_copy": {
-          "type": "string",
-          "description": "UUID of the run to clone. Use '<uuid-placeholder>' unless the user explicitly provides a value."
-        },
-
-        "name": {
-          "type": "string",
-          "description": "Display name for this run. Use '<run-name-placeholder>' unless the user explicitly provides a value."
-        },
-
-        "description": {
-          "type": "string",
-          "description": "Human-readable description. Use '<description-placeholder>' unless the user explicitly provides a value."
-        },
-
-        "user": {
-          "type": "string",
-          "description": "Owner email or username. Use '<user-placeholder>' unless the user explicitly provides a value."
-        },
-
-        "objective_function": {
-          "type": "string",
-          "description": "The optimization objective passed to the solver. Default 'Maximize Bank Balance' if not specified by the user."
-        },
-
-        "duration": {
-          "type": ["integer", "null"],
-          "description": "Number of weekly periods to run. Default 1351. null only when period resolution is pending. Convert years/months to periods (1 year = 52 periods) and flag in ambiguities."
-        },
-
-        "overhead_per_period": {
-          "type": ["number", "null"],
-          "description": "Weekly overhead cost in dollars. Default 0. If the user gives an annual figure, divide by 52 and flag the conversion in ambiguities."
-        },
-
-        "mip_gap": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "description": "MIP optimality gap tolerance as a decimal fraction (e.g. 0.001 = 0.1%). Default 0.001."
-        },
-
-        "timeout_seconds": {
-          "type": "integer",
-          "minimum": 1,
-          "description": "Maximum solver wall-clock time in seconds. Default 600."
-        },
-
-        "start_period": {
-          "type": ["integer", "null"],
-          "description": "PeriodID at which the simulation starts. Default 461. null when the user gives a date label — set period_resolution_required: true in that case."
-        }
-      }
-    },
 
     "sql_mutations": {
       "type": "array",
@@ -121,18 +55,6 @@
 
   "examples": [
     {
-      "run_params": {
-        "old_run_id_to_copy": "<uuid-placeholder>",
-        "name": "<run-name-placeholder>",
-        "description": "<description-placeholder>",
-        "user": "<user-placeholder>",
-        "objective_function": "Maximize Bank Balance",
-        "duration": 104,
-        "overhead_per_period": 0,
-        "mip_gap": 0.005,
-        "timeout_seconds": 600,
-        "start_period": 461
-      },
       "sql_mutations": [],
       "sql_mutation_reasoning": "No table mutations required — the user only specified run configuration parameters (duration and MIP gap), which are captured entirely in run_params. No input table data needs to change.",
       "period_resolution_required": false,
@@ -146,18 +68,6 @@
       "plain_english": "Run the optimizer from period 461 for 104 periods (~2 years) with a 0.5% MIP gap."
     },
     {
-      "run_params": {
-        "old_run_id_to_copy": "<uuid-placeholder>",
-        "name": "<run-name-placeholder>",
-        "description": "<description-placeholder>",
-        "user": "<user-placeholder>",
-        "objective_function": "Maximize Bank Balance",
-        "duration": 1351,
-        "overhead_per_period": 0,
-        "mip_gap": 0.001,
-        "timeout_seconds": 600,
-        "start_period": 461
-      },
       "sql_mutations": [
         "UPDATE input_investor_capital\nSET InterestRate = 0.015\nWHERE RunID = '{run_id}'\n  AND InvestorCapitalID = 'Loan1'"
       ],
@@ -171,18 +81,6 @@
       "plain_english": "Update the interest rate for Loan1 to 1.5% in input_investor_capital, then run the optimizer."
     },
     {
-      "run_params": {
-        "old_run_id_to_copy": "<uuid-placeholder>",
-        "name": "<run-name-placeholder>",
-        "description": "<description-placeholder>",
-        "user": "<user-placeholder>",
-        "objective_function": "Maximize Bank Balance",
-        "duration": 1351,
-        "overhead_per_period": 0,
-        "mip_gap": 0.001,
-        "timeout_seconds": 600,
-        "start_period": 461
-      },
       "sql_mutations": [
         "UPDATE input_cogs\nSET CogsRate = 0.25\nWHERE RunID = '{run_id}'\n  AND CustomerGroupID = 'C1'\n  AND PeriodID = 85"
       ],

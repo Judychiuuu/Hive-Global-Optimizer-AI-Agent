@@ -1,0 +1,8 @@
+streamlit>=1.35.0
+litellm>=1.40.0
+python-dotenv>=1.0.0
+jsonschema>=4.22.0
+pandas>=2.0.0
+deltalake>=0.18.0
+azure-identity>=1.17.0
+requests>=2.31.0

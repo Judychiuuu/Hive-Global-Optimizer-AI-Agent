@@ -8,6 +8,9 @@ Aggregate capital raise targets or limits across a range of periods.
 `RunID + FromPeriodID + ToPeriodID + ConstraintType`
 
 ## Fields
+
+> **No `InvestorCapitalID` field.** This table constrains *total* capital raised across ALL investors for a period range. Do NOT ask which investor — that field does not exist here. If the user wants an investor-specific fixed amount, use `input_fix_raises` instead.
+
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `RunID` | String | Yes | PK |

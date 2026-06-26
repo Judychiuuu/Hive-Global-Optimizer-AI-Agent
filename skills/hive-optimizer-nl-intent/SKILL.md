@@ -2,15 +2,16 @@
 name: hive-optimizer-nl-intent
 description: >
   Translates natural language commands into a structured intent for the Hive Global
-  Optimizer. Produces a run configuration (run_params) plus executable SQL mutations
-  (sql_mutations) to apply to input tables before executing the optimizer.
+  Optimizer. Produces executable SQL mutations (sql_mutations) to apply to input tables
+  before executing the optimizer. Run configuration (name, description, user, objective,
+  duration, mip_gap, timeout, start_period, overhead) is collected separately by the
+  application form — the model does NOT output a run_params block.
 
   Trigger on phrases like: "run the optimizer with OPEX 12M/year", "start from period 461
   for 2 years", "scale performance curves from period 465 to 521 by 20%", "set the
-  capital raised in 2027 to 80 million", "set MIP gap to 0.5%", "timeout after 10
-  minutes", "change the interest rate on Loan1", "update the COGS rate for C1",
-  "what is the deployment capacity for C1 in period 85", or any reference to
-  configuring a simulation or modifying/querying optimizer input data.
+  capital raised in 2027 to 80 million", "change the interest rate on Loan1",
+  "update the COGS rate for C1", "what is the deployment capacity for C1 in period 85",
+  or any reference to modifying/querying optimizer input data.
 ---
 
 # Hive Global Optimizer — NL-to-Intent Skill
@@ -50,37 +51,29 @@ For full table schemas (fields, types, PKs/FKs, validations, business context):
 
 ---
 
-## Step 1 — Populate `run_params` (always required)
+## Step 1 — Run configuration is collected by the app (do NOT output it)
 
-`run_params` maps directly to the `DE_NB_RunModel` notebook parameter cell.
-Use defaults for any field the user has not explicitly provided.
+**Do not output a `run_params` block.** Run configuration — `name`, `description`,
+`user`, `objective_function`, `duration`, `mip_gap`, `timeout_seconds`,
+`start_period`, and `overhead_per_period` — is collected separately by the
+application's Run Parameters form. Your output schema has no `run_params` field; emitting
+one is a hard failure.
 
-| Field | Type | Default when not specified |
+You still need a few of these values to build correct **period-range SQL** in Step 3.
+When the user does not state them, use these documented defaults:
+
+| Value | Default for SQL period ranges |
+|---|---|
+| `start_period` | `461` (PeriodID the run begins at) |
+| `duration` | `1351` (number of weekly periods; 1 year = 52 periods) |
+
+### User command → handling
+
+| User says | Handling | Notes |
 |---|---|---|
-| `old_run_id_to_copy` | string (UUID) | `"<uuid-placeholder>"` |
-| `name` | string | `"<run-name-placeholder>"` |
-| `description` | string | `"<description-placeholder>"` |
-| `user` | string (email / username) | `"<user-placeholder>"` |
-| `objective_function` | string | `"Maximize Bank Balance"` |
-| `duration` | integer | `1351` |
-| `overhead_per_period` | number | `0` — **always 0; never modified from user input** (overhead goes to `input_portfolios_config.Overhead` via SQL mutation) |
-| `mip_gap` | number | `0.001` |
-| `timeout_seconds` | integer | `600` |
-| `start_period` | integer | **No silent default — ask if not specified** (see Ambiguity Rules) |
-
-### User command → `run_params` field mapping
-
-| User says | `run_params` field | Notes |
-|---|---|---|
-| "start period 461" / "starting period 461" | `start_period` | Integer PeriodID |
-| "starting in July 2024" / "start from 2024-07" | `start_period: null` + `period_resolution_required: true` | Label needs PeriodID lookup — see Period Resolution |
-| start period **not specified** | `start_period: null` + flag in `ambiguities` | Always ask — see Ambiguity Rules |
-| "run for X weeks/periods" / "duration X" | `duration` | Integer |
-| "run for 2 years" | `duration: 104` | 52 weeks × 2; flag conversion in `ambiguities` |
-| "OPEX", "overhead", "fixed expenses" | *(not a run_params field)* | → Generate SQL mutation on `input_portfolios_config.Overhead` in Step 3. Never set `overhead_per_period`. |
-| "MIP gap / optimality gap / tolerance X%" | `mip_gap: X / 100` | Convert % to decimal |
-| "timeout X seconds/minutes" | `timeout_seconds` | Convert minutes to seconds if needed |
-| "maximize bank balance / maximize profit" | `objective_function` | Derive string from context |
+| "OPEX", "overhead", "fixed expenses" | → Generate SQL mutation on `input_portfolios_config.Overhead` in Step 3 | Overhead is a table value, never a run-config field |
+| "start period 461" / "run for 2 years" / "MIP gap 0.5%" / "timeout 10 min" / "maximize bank balance" | *(no SQL unless it affects a table)* | These are run-config values entered in the app form. Only use `start_period`/`duration` when needed to bound a period range in SQL. |
+| "starting in July 2024" applied to a table value | Resolve the period for the SQL `WHERE` clause | See Period Resolution |
 
 ---
 
@@ -138,7 +131,7 @@ WHERE RunID = '{run_id}'
 | unit margin | *both `input_performance_curves` and `input_cogs`* | — | See Derived Concepts section |
 | fixed deployment, committed deployment | `input_fix_deployments` | `CustomerGroupID`, `OriginalPeriodID`, `PeriodID`, `IsRepeat` | |
 | fixed raise, exact capital raise amount | `input_fix_raises` | `InvestorCapitalID`, `PeriodID` | No RunID (reference table); field: `Quantity` |
-| capital raise upper bound constraint | `input_aggregated_raises` | `FromPeriodID`, `ToPeriodID`, `ConstraintType` | Always ask: exact or upper bound? See Special mutations |
+| capital raise upper bound constraint | `input_aggregated_raises` | `FromPeriodID`, `ToPeriodID`, `ConstraintType` | NO `InvestorCapitalID` — applies to all capital combined. Only ask: exact or upper bound? Never ask which investor. |
 | aggregated deployment constraint | `input_aggregated_deployments` | `FromPeriodID`, `ToPeriodID` | |
 | time periods, period label, calendar date | `input_time_periods` | `PeriodID` | |
 | optimizer parameters, start balance, objective | `input_parameters` | `Name` | |
@@ -157,16 +150,16 @@ WHERE RunID = '{run_id}'
 
 ### Populate `sql_mutation_reasoning` (always required)
 
-After writing `sql_mutations`, populate `sql_mutation_reasoning` with a one-to-two sentence explanation of the mutation decisions. Cover: which table mapping rule was applied, why those columns/values/WHERE conditions were chosen, and any value conversions made. **When `sql_mutations` is `[]`, still explain why no table changes were needed** (e.g. the user only changed run configuration parameters captured in `run_params`).
+After writing `sql_mutations`, populate `sql_mutation_reasoning` with a one-to-two sentence explanation of the mutation decisions. Cover: which table mapping rule was applied, why those columns/values/WHERE conditions were chosen, and any value conversions made. **When `sql_mutations` is `[]`, still explain why no table changes were needed** (e.g. the user only changed run configuration, which is entered in the app's Run Parameters form).
 
 ### Special mutations
 
 | User says | Table | Notes |
 |---|---|---|
 | "scale performance curves from period X to Y by Z%" | `input_performance_curves` | UPDATE multiplying `ReturnRate` and `RepeatReturnRate` by `(1 - Z/100)`; flag scale factor in `ambiguities` |
-| capital raise — **exact amount** (optimizer must raise exactly this) | `input_fix_raises` | UPDATE/INSERT `Quantity`; PK is `InvestorCapitalID + PeriodID`; **no RunID** (reference table) |
-| capital raise — **upper bound** (optimizer may raise up to this) | `input_aggregated_raises` | INSERT/UPDATE `AggRaises` with `ConstraintType = 'LessThanOrEqual'`; PK includes RunID |
-| capital raise — **intent not stated** | *(no SQL yet)* | Always ask: "Is this an exact fixed amount the optimizer must raise, or an upper bound it may raise up to?" before generating SQL |
+| capital raise — **exact amount** (optimizer must raise exactly this) | `input_fix_raises` | UPDATE/INSERT `Quantity`; PK is `InvestorCapitalID + PeriodID`; **no RunID** (reference table). Ask: "Which investor should this apply to?" to get the `InvestorCapitalID`. |
+| capital raise — **upper bound** (optimizer may raise up to this) | `input_aggregated_raises` | INSERT/UPDATE `AggRaises` with `ConstraintType = 'LessThanOrEqual'`; PK includes RunID. **No `InvestorCapitalID` — do NOT ask which investor.** |
+| capital raise — **intent not stated** | *(no SQL yet)* | Ask: "Is this an exact fixed amount the optimizer must raise, or an upper bound it may raise up to?" Then: if exact → also ask which investor; if upper bound → do not ask about investor. |
 | "set OPEX / overhead to X" | `input_portfolios_config` | UPDATE `Overhead`; can target all periods (`PeriodID BETWEEN start AND end`) or a specific period; ask if period-level or portfolio-level |
 
 ---
@@ -186,14 +179,14 @@ After writing `sql_mutations`, populate `sql_mutation_reasoning` with a one-to-t
 **Period floor rule**: if a date falls between two PeriodLabels, take the smaller
 PeriodID — that is the week containing the date.
 
-**`input_periods_config` lookup**: When a user provides a datetime (any format), you can also look up the matching PeriodID directly from `input_periods_config`:
+**`input_time_periods` lookup**: When a user provides a datetime (any format), you can also look up the matching PeriodID directly from `input_time_periods`:
 ```sql
-SELECT PeriodID FROM input_periods_config
+SELECT PeriodID FROM input_time_periods
 WHERE RunID = '{run_id}'
   AND PeriodLabel = '<user-provided-datetime>'
 LIMIT 1
 ```
-Use this pattern when the user provides an exact label that matches `input_periods_config.PeriodLabel`.
+Use this pattern when the user provides an exact label that matches `input_time_periods.PeriodLabel`.
 
 ---
 
@@ -248,7 +241,7 @@ This applies to all table mutations involving numeric values without an explicit
 
 Populate `ambiguities[]` and set `confidence < 0.80` when any of these apply:
 
-- **Start period not specified** — always ask: "What start period should the scenario apply from? (Provide a PeriodID integer, or a date/month — I'll look it up in `input_periods_config.PeriodLabel`.)" Do not silently default to 461.
+- **Start period not specified** — always ask: "What start period should the scenario apply from? (Provide a PeriodID integer, or a date/month — I'll look it up in the `input_time_periods` table.)" Do not silently default to 461.
 - **Value time unit missing** — user gives a number without specifying weekly/monthly/yearly
   for a table mutation. Ask the clarifying question above.
 - **Year-level period** — user gives only a year → set `period_resolution_required: true`
@@ -258,7 +251,9 @@ Populate `ambiguities[]` and set `confidence < 0.80` when any of these apply:
 - **`duration` in years/months** → convert to weekly periods and flag.
 - **`objective_function` not specified** → default to `"Maximize Bank Balance"` and note it.
 - **COGS type** — `CogsID` defaults to `'ALL'`; no clarification needed unless the user explicitly references a specific COGS type (e.g. "underwriting", "payment processing"). If a type is mentioned, ask: "Which COGS type? Options: Payment Processing, Call Center, Other (Longitudinal); Underwriting, Marketing (CrossSectional)." Then resolve to `CogsID` via `input_cogs_types`.
-- **Capital raise — exact vs upper bound** — always ask before generating SQL: "Should this capital raise be an exact fixed amount (optimizer must raise exactly this), or an upper bound (optimizer may raise up to this)?" Exact → `input_fix_raises.Quantity`; upper bound → `input_aggregated_raises.AggRaises` with `ConstraintType = 'LessThanOrEqual'`.
+- **Capital raise — exact vs upper bound** — always ask before generating SQL: "Is this an exact fixed amount the optimizer must raise, or an upper bound it may raise up to?"
+  - **Exact** → `input_fix_raises.Quantity` (PK: `InvestorCapitalID + PeriodID`). After confirming exact, ask: "Which investor should this apply to? Please provide the `InvestorCapitalID`." Do not generate SQL until you have it.
+  - **Upper bound** → `input_aggregated_raises.AggRaises` with `ConstraintType = 'LessThanOrEqual'`. This table has **no `InvestorCapitalID`** — do NOT ask which investor.
 - **Unit margin modification** — never generate SQL directly; ask for vintage return value, COGS value, and whether it applies to new customers, repeat customers, or both. See Derived Concepts section.
 
 ---
@@ -267,18 +262,6 @@ Populate `ambiguities[]` and set `confidence < 0.80` when any of these apply:
 
 ```json
 {
-  "run_params": {
-    "old_run_id_to_copy": "<uuid-placeholder>",
-    "name": "<run-name-placeholder>",
-    "description": "<description-placeholder>",
-    "user": "<user-placeholder>",
-    "objective_function": "Maximize Bank Balance",
-    "duration": 1351,
-    "overhead_per_period": 0,
-    "mip_gap": 0.001,
-    "timeout_seconds": 600,
-    "start_period": 461
-  },
   "sql_mutations": [
     "UPDATE input_cogs\nSET CogsRate = 0.25\nWHERE RunID = '{run_id}'\n  AND CustomerGroupID = 'C1'\n  AND PeriodID = 85"
   ],
@@ -293,7 +276,7 @@ Populate `ambiguities[]` and set `confidence < 0.80` when any of these apply:
 
 ### Field rules
 
-- **`run_params`**: always present. Matches `DE_NB_RunModel` parameter cell exactly.
+- **No `run_params`**: do not emit a `run_params` field. Run configuration is collected by the app form.
 - **`sql_mutations`**: always present; `[]` when no table changes are needed. Each string is
   a complete SQL statement with `'{run_id}'` placeholder. Only `UPDATE`/`INSERT`/`DELETE`.
   Every run-scoped table mutation must include `WHERE RunID = '{run_id}'`.
@@ -315,29 +298,13 @@ Populate `ambiguities[]` and set `confidence < 0.80` when any of these apply:
 **Command:** "Run the optimizer from period 461 for 2 years with a 0.5% MIP gap."
 ```json
 {
-  "run_params": {
-    "old_run_id_to_copy": "<uuid-placeholder>",
-    "name": "<run-name-placeholder>",
-    "description": "<description-placeholder>",
-    "user": "<user-placeholder>",
-    "objective_function": "Maximize Bank Balance",
-    "duration": 104,
-    "overhead_per_period": 0,
-    "mip_gap": 0.005,
-    "timeout_seconds": 600,
-    "start_period": 461
-  },
   "sql_mutations": [],
-  "sql_mutation_reasoning": "No table mutations required — the user only specified run configuration parameters (duration and MIP gap), which are captured entirely in run_params. No input table data needs to change.",
+  "sql_mutation_reasoning": "No table mutations required — the user only specified run configuration (start period, duration, and MIP gap), which is entered in the app's Run Parameters form, not in any input table. No input table data needs to change.",
   "period_resolution_required": false,
   "period_label": null,
-  "confidence": 0.90,
-  "ambiguities": [
-    "Duration '2 years' converted to 104 weekly periods (52 × 2). Confirm if correct.",
-    "objective_function not specified; defaulted to 'Maximize Bank Balance'.",
-    "overhead_per_period not specified; defaulted to 0."
-  ],
-  "plain_english": "Run the optimizer starting from period 461 for 104 periods (~2 years) with a 0.5% optimality gap."
+  "confidence": 0.95,
+  "ambiguities": [],
+  "plain_english": "No input table changes needed — this command only sets run configuration (start period 461, ~2 year duration, 0.5% MIP gap), which you enter in the Run Parameters form."
 }
 ```
 
@@ -346,30 +313,16 @@ Populate `ambiguities[]` and set `confidence < 0.80` when any of these apply:
 **Command:** "OPEX is 12 million per year, start from period 461."
 ```json
 {
-  "run_params": {
-    "old_run_id_to_copy": "<uuid-placeholder>",
-    "name": "<run-name-placeholder>",
-    "description": "<description-placeholder>",
-    "user": "<user-placeholder>",
-    "objective_function": "Maximize Bank Balance",
-    "duration": 1351,
-    "overhead_per_period": 0,
-    "mip_gap": 0.001,
-    "timeout_seconds": 600,
-    "start_period": 461
-  },
   "sql_mutations": [
     "UPDATE input_portfolios_config\nSET Overhead = 230769.23\nWHERE RunID = '{run_id}'\n  AND PeriodID BETWEEN 461 AND (461 + 1351)"
   ],
-  "sql_mutation_reasoning": "User said 'OPEX is 12 million per year' → overhead goes to input_portfolios_config.Overhead (not run_params.overhead_per_period, which stays 0). Annual $12M converted to weekly: 12,000,000 / 52 ≈ 230,769.23. Applied across all periods in the run range.",
+  "sql_mutation_reasoning": "User said 'OPEX is 12 million per year' → overhead goes to input_portfolios_config.Overhead. Annual $12M converted to weekly: 12,000,000 / 52 ≈ 230,769.23. Applied across the run range using start_period 461 and the default duration 1351.",
   "period_resolution_required": false,
   "period_label": null,
-  "confidence": 0.75,
+  "confidence": 0.80,
   "ambiguities": [
     "Annual OPEX of $12M converted to weekly: 12,000,000 / 52 ≈ 230,769.23 per period. Confirm this unit conversion.",
-    "Applied Overhead to all periods from 461 to 461+duration. Let me know if you intended a specific period range.",
-    "duration not specified; defaulted to 1351.",
-    "objective_function not specified; defaulted to 'Maximize Bank Balance'."
+    "Applied Overhead to all periods from 461 to 461+1351 (default duration). Let me know if you intended a specific period range."
   ],
   "plain_english": "Set the weekly overhead in input_portfolios_config to ~$230,769 (converted from $12M annual OPEX) for all periods starting at period 461."
 }
@@ -380,18 +333,6 @@ Populate `ambiguities[]` and set `confidence < 0.80` when any of these apply:
 **Command:** "Change the interest rate on Loan1 to 1.5%."
 ```json
 {
-  "run_params": {
-    "old_run_id_to_copy": "<uuid-placeholder>",
-    "name": "<run-name-placeholder>",
-    "description": "<description-placeholder>",
-    "user": "<user-placeholder>",
-    "objective_function": "Maximize Bank Balance",
-    "duration": 1351,
-    "overhead_per_period": 0,
-    "mip_gap": 0.001,
-    "timeout_seconds": 600,
-    "start_period": 461
-  },
   "sql_mutations": [
     "UPDATE input_investor_capital\nSET InterestRate = 0.015\nWHERE RunID = '{run_id}'\n  AND InvestorCapitalID = 'Loan1'"
   ],
@@ -411,18 +352,6 @@ Populate `ambiguities[]` and set `confidence < 0.80` when any of these apply:
 **Command:** "Update the underwriting COGS rate for C1 to 25% starting July 2024."
 ```json
 {
-  "run_params": {
-    "old_run_id_to_copy": "<uuid-placeholder>",
-    "name": "<run-name-placeholder>",
-    "description": "<description-placeholder>",
-    "user": "<user-placeholder>",
-    "objective_function": "Maximize Bank Balance",
-    "duration": 1351,
-    "overhead_per_period": 0,
-    "mip_gap": 0.001,
-    "timeout_seconds": 600,
-    "start_period": 461
-  },
   "sql_mutations": [
     "UPDATE input_cogs\nSET CogsRate = 0.25\nWHERE RunID = '{run_id}'\n  AND CustomerGroupID = 'C1'\n  AND PeriodID = (SELECT PeriodID FROM input_time_periods WHERE RunID = '{run_id}' AND PeriodLabel >= '2024-07-01' ORDER BY PeriodLabel ASC LIMIT 1)"
   ],
@@ -443,18 +372,6 @@ Populate `ambiguities[]` and set `confidence < 0.80` when any of these apply:
 **Command:** "Set the capital raised in 2027 to 80 million."
 ```json
 {
-  "run_params": {
-    "old_run_id_to_copy": "<uuid-placeholder>",
-    "name": "<run-name-placeholder>",
-    "description": "<description-placeholder>",
-    "user": "<user-placeholder>",
-    "objective_function": "Maximize Bank Balance",
-    "duration": 1351,
-    "overhead_per_period": 0,
-    "mip_gap": 0.001,
-    "timeout_seconds": 600,
-    "start_period": 461
-  },
   "sql_mutations": [],
   "sql_mutation_reasoning": "No SQL generated yet — the target period cannot be resolved without knowing the month in 2027, and the value granularity ($80M yearly/monthly/weekly) is unconfirmed. Will generate an INSERT into input_aggregated_raises once both are clarified.",
   "period_resolution_required": true,
@@ -472,16 +389,14 @@ Populate `ambiguities[]` and set `confidence < 0.80` when any of these apply:
 
 ## Evaluation Rubric
 
-Score each response out of **12 points**. Pass = 11–12; acceptable = 8–10; fail = < 8.
+Score each response out of **8 points**. Pass = 7–8; acceptable = 5–6; fail = < 5.
 
 | # | Criterion | Points | How to score |
 |---|-----------|--------|--------------|
-| 1 | `run_params` optimizer fields correct | 3 | +1 per correctly populated field among `objective_function`, `duration`, `overhead_per_period`, `mip_gap`, `timeout_seconds`, `start_period` (max 3); −1 per hallucinated value |
-| 2 | `run_params` identity fields correct | 1 | +1 if `old_run_id_to_copy`, `name`, `description`, `user` use placeholders unless explicitly provided; 0 if fabricated |
-| 3 | `sql_mutations` SQL verb correct | 1 | +1 if only UPDATE/INSERT/DELETE used; 0 if SELECT appears or verb is wrong |
-| 4 | `sql_mutations` table correct | 1 | +1 if SQL targets the right table; 0 if wrong table |
-| 5 | `sql_mutations` SET / values correct | 2 | +1 per correct field=value pair in the SQL (max 2); −1 per hallucinated column |
-| 6 | `sql_mutations` WHERE correct | 1 | +1 if RunID placeholder present on run-scoped tables and PK columns are correct; 0 if missing |
-| 7 | `period_resolution_required` accurate | 1 | +1 set to `true` only when year-level; `false` for exact or month-level (with default note) |
-| 8 | `confidence` calibrated | 1 | +1 if `ambiguities` non-empty ↔ `confidence < 0.80`, and empty ↔ `≥ 0.80` |
-| 9 | `ambiguities` completeness | 1 | +1 if all unit conversions, assumptions, unresolved fields flagged (including value granularity when missing) |
+| 1 | `sql_mutations` SQL verb correct | 1 | +1 if only UPDATE/INSERT/DELETE used; 0 if SELECT appears or verb is wrong |
+| 2 | `sql_mutations` table correct | 1 | +1 if SQL targets the right table; 0 if wrong table |
+| 3 | `sql_mutations` SET / values correct | 2 | +1 per correct field=value pair in the SQL (max 2); −1 per hallucinated column |
+| 4 | `sql_mutations` WHERE correct | 1 | +1 if RunID placeholder present on run-scoped tables and PK columns are correct; 0 if missing |
+| 5 | `period_resolution_required` accurate | 1 | +1 set to `true` only when year-level; `false` for exact or month-level (with default note) |
+| 6 | `confidence` calibrated | 1 | +1 if `ambiguities` non-empty ↔ `confidence < 0.80`, and empty ↔ `≥ 0.80` |
+| 7 | `ambiguities` completeness | 1 | +1 if all unit conversions, assumptions, unresolved fields flagged (including value granularity when missing) |
