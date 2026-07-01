@@ -40,7 +40,7 @@ For full table schemas (fields, types, PKs/FKs, validations, business context):
 ## Data Model Key Points
 
 - **Periods are weekly** (Monday start). `PeriodLabel` format: `YYYY-MM-DD`.
-  Period 1 = `2017-07-03`. All tables reference time via `PeriodID`.
+  Period 1 = `2017-06-12`. All tables reference time via `PeriodID`.
 - **All run-scoped tables are partitioned by `RunID`** — every SQL mutation on a
   run-scoped table **must** include `WHERE RunID = '{run_id}'`.
   Run-scoped tables: all 14 `input_*` tables with a RunID column, plus all 11 `output_*` tables.
@@ -55,9 +55,8 @@ For full table schemas (fields, types, PKs/FKs, validations, business context):
 
 **Do not output a `run_params` block.** Run configuration — `name`, `description`,
 `user`, `objective_function`, `duration`, `mip_gap`, `timeout_seconds`,
-`start_period`, and `overhead_per_period` — is collected separately by the
-application's Run Parameters form. Your output schema has no `run_params` field; emitting
-one is a hard failure.
+and `start_period` — is collected separately by the application's Run Parameters form.
+Your output schema has no `run_params` field; emitting one is a hard failure.
 
 You still need a few of these values to build correct **period-range SQL** in Step 3.
 When the user does not state them, use these documented defaults:
@@ -71,9 +70,11 @@ When the user does not state them, use these documented defaults:
 
 | User says | Handling | Notes |
 |---|---|---|
-| "OPEX", "overhead", "fixed expenses" | → Generate SQL mutation on `input_portfolios_config.Overhead` in Step 3 | Overhead is a table value, never a run-config field |
+| "OPEX", "overhead", "fixed expenses" | → Generate SQL mutation on `input_portfolios_config.Overhead` in Step 3 | Overhead is a **table value**, not a run parameter |
 | "start period 461" / "run for 2 years" / "MIP gap 0.5%" / "timeout 10 min" / "maximize bank balance" | *(no SQL unless it affects a table)* | These are run-config values entered in the app form. Only use `start_period`/`duration` when needed to bound a period range in SQL. |
 | "starting in July 2024" applied to a table value | Resolve the period for the SQL `WHERE` clause | See Period Resolution |
+
+> **HARD RULE — OPEX/Overhead routing:** Any user command containing "OPEX", "overhead", or "fixed expenses" **always** requires a SQL mutation targeting `input_portfolios_config.Overhead` (Step 3). It is **never** a run configuration parameter and must **never** produce an empty `sql_mutations`. Emitting `sql_mutations: []` for an OPEX/overhead intent is a hard failure.
 
 ---
 
@@ -134,7 +135,7 @@ WHERE RunID = '{run_id}'
 | capital raise upper bound constraint | `input_aggregated_raises` | `FromPeriodID`, `ToPeriodID`, `ConstraintType` | NO `InvestorCapitalID` — applies to all capital combined. Only ask: exact or upper bound? Never ask which investor. |
 | aggregated deployment constraint | `input_aggregated_deployments` | `FromPeriodID`, `ToPeriodID` | |
 | time periods, period label, calendar date | `input_time_periods` | `PeriodID` | |
-| optimizer parameters, start balance, objective | `input_parameters` | `Name` | |
+| optimizer parameters, start balance | `input_parameters` | — (wide table: one row per RunID, parameter names are column names) | Only SQL-only params; form-driven params are set automatically |
 
 ### COGS rules
 

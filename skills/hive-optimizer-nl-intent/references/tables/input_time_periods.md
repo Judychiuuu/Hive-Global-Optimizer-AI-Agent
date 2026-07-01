@@ -11,7 +11,7 @@ Maps PeriodID integers to actual calendar weeks (Monday dates).
 | Field | Type | Description |
 |---|---|---|
 | `RunID` | String | PK — run identifier |
-| `PeriodID` | Integer | PK — sequential week number (Period 1 = week of 2017-07-03) |
+| `PeriodID` | Integer | PK — sequential week number (Period 1 = week of 2017-06-12) |
 | `PeriodLabel` | String | Monday date of the week in YYYY-MM-DD format |
 
 ## Period lookup patterns

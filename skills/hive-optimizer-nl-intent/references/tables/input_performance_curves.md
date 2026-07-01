@@ -11,6 +11,7 @@ Expected financial performance of deployed capital over time (return rates, inte
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `RunID` | String | Yes | PK |
+| `PortfolioID` | Integer | Yes | PK |
 | `CustomerGroupID` | String | Yes | PK — FK → input_customer_groups |
 | `PeriodID` | Integer | Yes | PK — deployment period |
 | `PeriodsSinceDeployment` | Integer | Yes | PK — loan age (0 = deployment period) |

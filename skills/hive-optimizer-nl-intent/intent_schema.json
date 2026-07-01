@@ -62,8 +62,7 @@
       "confidence": 0.90,
       "ambiguities": [
         "Duration '2 years' converted to 104 weekly periods (52 × 2). Confirm if correct.",
-        "objective_function not specified; defaulted to 'Maximize Bank Balance'.",
-        "overhead_per_period not specified; defaulted to 0."
+        "objective_function not specified; defaulted to 'Maximize Bank Balance'."
       ],
       "plain_english": "Run the optimizer from period 461 for 104 periods (~2 years) with a 0.5% MIP gap."
     },

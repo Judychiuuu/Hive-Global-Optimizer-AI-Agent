@@ -11,10 +11,11 @@ Period-by-period schedule of interest and principal payments to investors.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `RunID` | String | Yes | PK |
+| `PortfolioID` | Integer | Yes | PK |
 | `InvestorCapitalID` | String | Yes | PK — FK → input_investor_capital |
 | `PeriodID` | Integer | Yes | PK — FK → input_time_periods |
 | `PaymentType` | String | Yes | PK — 'Interest' or 'Principal' |
-| `Amount` | Float | Yes | Payment amount due this period |
+| `Amount` | Float | Yes | The amount repayed in USD in this period |
 
 ## Common mutations
 

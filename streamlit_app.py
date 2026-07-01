@@ -61,17 +61,95 @@ st.set_page_config(
 )
 
 # ── Period lookup ─────────────────────────────────────────────────────────────
-def _build_period_lookup_json() -> str:
+def _build_period_lookups() -> tuple[str, str]:
+    """Compute (weekly_json, monthly_boundary_json) from Python date arithmetic.
+
+    Used only as a fallback when the database is not configured or unavailable.
+    Prefer _get_period_lookups(), which reads the actual input_time_periods table.
+    """
     base = date(2017, 6, 5)
-    rows, d, pid = [], base, 0
+    rows = []
+    month_bounds: dict[str, dict] = {}
+    d, pid = base, 0
     while d.year <= 2029:
         if d.year >= 2024:
             rows.append({"PeriodID": pid, "PeriodLabel": d.strftime("%Y-%m-%d")})
+            key = d.strftime("%Y-%m")
+            if key not in month_bounds:
+                month_bounds[key] = {"Month": key, "FirstPeriodID": pid, "LastPeriodID": pid}
+            else:
+                month_bounds[key]["LastPeriodID"] = pid
         d += timedelta(weeks=1)
         pid += 1
-    return json.dumps(rows)
+    monthly = list(month_bounds.values())
+    return json.dumps(rows), json.dumps(monthly)
 
-PERIOD_LOOKUP_JSON = _build_period_lookup_json()
+
+@st.cache_resource
+def _load_period_data_from_db() -> "tuple[pd.DataFrame | None, str | None]":
+    """Load input_time_periods from the actual Delta table for TEST_RUN_ID.
+
+    Cached for the lifetime of the Streamlit server process. Returns (df, error).
+    """
+    if not _db_configured():
+        return None, "Database not configured"
+    return _query_df("SELECT * FROM input_time_periods")
+
+
+def _build_period_lookups_from_df(df: "pd.DataFrame") -> tuple[str, str]:
+    """Build (weekly_json, monthly_boundary_json) from an input_time_periods DataFrame.
+
+    Mirrors _build_period_lookups() but uses real table data instead of arithmetic.
+    Both the weekly and monthly tables are limited to 2024+ (matching the fallback).
+    """
+    df = df.sort_values("PeriodID").reset_index(drop=True)
+    rows = []
+    month_bounds: dict[str, dict] = {}
+    for _, row in df.iterrows():
+        label = str(row["PeriodLabel"])
+        pid = int(row["PeriodID"])
+        if label[:4] >= "2024":
+            rows.append({"PeriodID": pid, "PeriodLabel": label})
+            key = label[:7]  # YYYY-MM
+            if key not in month_bounds:
+                month_bounds[key] = {"Month": key, "FirstPeriodID": pid, "LastPeriodID": pid}
+            else:
+                month_bounds[key]["LastPeriodID"] = pid
+    return json.dumps(rows), json.dumps(list(month_bounds.values()))
+
+
+def _get_period_lookups() -> tuple[str, str]:
+    """Return (weekly_json, monthly_boundary_json) from the actual DB, or computed fallback."""
+    df, _err = _load_period_data_from_db()
+    if df is not None and not df.empty:
+        return _build_period_lookups_from_df(df)
+    return _build_period_lookups()
+
+
+def resolve_period_id(date_str: str, mode: str = "floor") -> int | None:
+    """Resolve a date string to a PeriodID from the actual input_time_periods table.
+
+    mode:
+      "floor"      — largest PeriodID where PeriodLabel <= date_str (containing week)
+      "first_week" — smallest PeriodID where PeriodLabel >= date_str (pass YYYY-MM-01)
+      "last_week"  — largest PeriodID where PeriodLabel < date_str (pass next month's first day)
+
+    Returns None if DB is not configured or no matching period is found.
+    """
+    df, _ = _load_period_data_from_db()
+    if df is None or df.empty:
+        return None
+    df = df.sort_values("PeriodLabel")
+    if mode == "floor":
+        candidates = df[df["PeriodLabel"] <= date_str]
+        return int(candidates.iloc[-1]["PeriodID"]) if not candidates.empty else None
+    if mode == "first_week":
+        candidates = df[df["PeriodLabel"] >= date_str]
+        return int(candidates.iloc[0]["PeriodID"]) if not candidates.empty else None
+    if mode == "last_week":
+        candidates = df[df["PeriodLabel"] < date_str]
+        return int(candidates.iloc[-1]["PeriodID"]) if not candidates.empty else None
+    return None
 
 # ── Load skill resources ───────────────────────────────────────────────────────
 @st.cache_resource
@@ -89,37 +167,46 @@ def load_resources():
 
 SKILL_TEXT, INTENT_SCHEMA = load_resources()
 
-PERIOD_LOOKUP_SECTION = (
-    "\n\n## Period Lookup Reference (mock input_time_periods)\n"
-    "The following JSON array maps PeriodID integers to PeriodLabel (Monday dates) "
-    "for all weeks from 2024 through 2029. Use this table directly — "
-    "do NOT set period_resolution_required: true for any date in 2024–2029.\n"
-    "When the user gives only a year like '2027', set:\n"
-    "  FromPeriodID = PeriodID of the first entry where PeriodLabel starts with '2027-01'\n"
-    "  ToPeriodID   = PeriodID of the last entry where PeriodLabel starts with '2027-12'\n\n"
-    + PERIOD_LOOKUP_JSON
-)
+@st.cache_resource
+def _get_intent_system_message() -> dict:
+    """Build the LLM system message, sourcing period data from the actual DB when available.
 
-INTENT_SYSTEM_MESSAGE = {
-    "role": "system",
-    "content": [
-        {
-            "type": "text",
-            "text": (
-                "You are a database intent parser for the Hive Global Optimizer.\n\n"
-                + SKILL_TEXT
-                + PERIOD_LOOKUP_SECTION
-                + "\n\nCRITICAL SQL RULES — violating these will cause a hard failure:\n"
-                "1. Use ONLY UPDATE or DELETE statements in sql_mutations. Never use INSERT or SELECT.\n"
-                "   CopyRun has already created all rows for this RunID — only UPDATE or DELETE existing rows.\n"
-                "2. Every UPDATE must include WHERE RunID = '{RUN_ID}' as the first WHERE condition.\n"
-                "\n\nRespond ONLY with a valid JSON object matching the output schema defined in the skill.\n"
-                "No preamble, no explanation, no markdown fences. Raw JSON only."
-            ),
-            "cache_control": {"type": "ephemeral"},
-        }
-    ],
-}
+    Cached so the (potentially large) period JSON strings are assembled only once per
+    server process. Falls back to Python-computed periods when DB is not configured.
+    """
+    period_json, month_json = _get_period_lookups()
+    period_section = (
+        "\n\n## Period Lookup Reference\n"
+        "### Month Boundary Table (USE THIS for any month or year reference)\n"
+        "Each entry gives the exact first and last PeriodID for that calendar month. "
+        "A PeriodID refers to the Monday that starts that week. "
+        "Use FirstPeriodID when the user means the start of a month/year; "
+        "use LastPeriodID when they mean the end. "
+        "Do NOT set period_resolution_required: true for any date in 2024–2029.\n\n"
+        + month_json
+        + "\n\n### Weekly Detail Table (reference only — use the month table above for lookups)\n"
+        + period_json
+    )
+    return {
+        "role": "system",
+        "content": [
+            {
+                "type": "text",
+                "text": (
+                    "You are a database intent parser for the Hive Global Optimizer.\n\n"
+                    + SKILL_TEXT
+                    + period_section
+                    + "\n\nCRITICAL SQL RULES — violating these will cause a hard failure:\n"
+                    "1. Use ONLY UPDATE or DELETE statements in sql_mutations. Never use INSERT or SELECT.\n"
+                    "   CopyRun has already created all rows for this RunID — only UPDATE or DELETE existing rows.\n"
+                    "2. Every UPDATE must include WHERE RunID = '{RUN_ID}' as the first WHERE condition.\n"
+                    "\n\nRespond ONLY with a valid JSON object matching the output schema defined in the skill.\n"
+                    "No preamble, no explanation, no markdown fences. Raw JSON only."
+                ),
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
+    }
 
 # ── Fabric authentication & DB helpers ────────────────────────────────────────
 
@@ -196,7 +283,7 @@ def _apply_extra_where(df: pd.DataFrame, where_text: str) -> pd.DataFrame:
     return df
 
 
-def _query_df(sql: str) -> tuple[pd.DataFrame | None, str | None]:
+def _query_df(sql: str, run_id: str | None = None) -> tuple[pd.DataFrame | None, str | None]:
     """Parse a SELECT * FROM <table> [WHERE ...] statement and read via OneLake Delta."""
     m = re.match(
         r"SELECT\s+\*\s+FROM\s+(\w+)(?:\s+(WHERE\s+.+))?$",
@@ -219,12 +306,13 @@ def _query_df(sql: str) -> tuple[pd.DataFrame | None, str | None]:
             "Run `az login` in your terminal, or set FABRIC_AUTH_METHOD=browser in .env."
         )
 
+    _run_id = run_id or TEST_RUN_ID
     try:
         dt = deltalake.DeltaTable(
             _onelake_path(table_name),
             storage_options={"account_name": "onelake", "bearer_token": token},
         )
-        df = dt.to_pandas(filters=[("RunID", "=", TEST_RUN_ID)])
+        df = dt.to_pandas(filters=[("RunID", "=", _run_id)])
         if where_text:
             df = _apply_extra_where(df, where_text)
         return df, None
@@ -254,6 +342,25 @@ def _inject_runid(sql: str) -> str:
         pos = where_match.end()
         return stripped[:pos] + " RunID = '{run_id}' AND" + stripped[pos:]
     return stripped.rstrip(';').rstrip() + "\nWHERE RunID = '{run_id}'"
+
+
+def _run_params_to_sql(rp: dict) -> list[str]:
+    """Generate a single UPDATE input_parameters SQL from the Step 3.3 form values.
+
+    input_parameters is a wide table (one row per RunID, parameters as columns).
+    DE_NB_RunModel reads it directly from the lakehouse — these UPDATEs are the
+    only way form values reach the optimizer.
+    """
+    end_period = rp["start_period"] + rp["duration"]
+    obj = rp["objective_function"]
+    return [
+        f"UPDATE input_parameters\n"
+        f"SET StartPeriod = '{rp['start_period']}',\n"
+        f"    EndPeriod = '{end_period}',\n"
+        f"    MainObjectiveFunction = '{obj}',\n"
+        f"    MIPGap = '{rp['mip_gap']}'\n"
+        f"WHERE RunID = '{{run_id}}'"
+    ]
 
 
 def validate_sql(sql: str) -> str | None:
@@ -479,7 +586,7 @@ def _strip_fences(text: str) -> str:
 def _call_with_retry(messages, label: str):
     for attempt in range(4):
         try:
-            return litellm.completion(model=MODEL, max_tokens=700, messages=messages)
+            return litellm.completion(model=MODEL, max_tokens=2048, messages=messages)
         except RateLimitError as e:
             delay = 30 * (2 ** attempt)
             try:
@@ -497,6 +604,25 @@ def _call_with_retry(messages, label: str):
     return None
 
 
+def _friendly_json_error(e: json.JSONDecodeError, raw: str) -> str:
+    msg = str(e)
+    if "Unterminated string" in msg or "Expecting" in msg and "EOF" in msg:
+        return (
+            "The model's response was cut off before it finished — "
+            "the JSON is incomplete. Try rephrasing your request more concisely, "
+            "or break it into two smaller requests."
+        )
+    if "Extra data" in msg:
+        return "The model returned extra text after the JSON object. Retrying…"
+    if "Expecting property name" in msg or "Expecting value" in msg:
+        col = getattr(e, "colno", "?")
+        return (
+            f"The model produced malformed JSON near column {col}. "
+            "This can happen with complex requests — retrying with a correction prompt."
+        )
+    return f"The model returned invalid JSON: {msg}"
+
+
 def run_intent_call(messages, attempt_offset: int = 0):
     MAX_RETRIES = 2
     for attempt in range(MAX_RETRIES + 1):
@@ -507,7 +633,10 @@ def run_intent_call(messages, attempt_offset: int = 0):
         try:
             parsed = json.loads(raw)
         except json.JSONDecodeError as e:
-            st.warning(f"Invalid JSON (try {attempt + 1}): {e}")
+            friendly = _friendly_json_error(e, raw)
+            st.warning(f"Re-parse attempt {attempt + 1} failed — {friendly}")
+            with st.expander(f"Raw model output (attempt {attempt + 1})", expanded=False):
+                st.code(raw, language="json")
             if attempt < MAX_RETRIES:
                 messages += [
                     {"role": "assistant", "content": raw},
@@ -579,6 +708,102 @@ def run_fabric_notebook(notebook_env_key: str, parameters: dict) -> tuple[bool, 
         return False, str(e)
 
 
+def _get_new_run_id_from_fabric(
+    name: str,
+    description: str,
+    user: str,
+    duration: int,
+    timeout_seconds: int,
+    max_wait: int = 360,
+) -> tuple[str | None, str | None]:
+    """Submit DE_NB_Get_New_Run_Id, poll until done, return (new_run_id, error)."""
+    workspace_id = os.getenv("FABRIC_WORKSPACE_ID")
+    notebook_id = os.getenv("FABRIC_NOTEBOOK_GET_NEW_RUN_ID")
+    if not (workspace_id and notebook_id):
+        return None, "Missing FABRIC_WORKSPACE_ID or FABRIC_NOTEBOOK_GET_NEW_RUN_ID in .env"
+
+    token = _get_cached_token()
+    if not token:
+        return None, "Cannot acquire Fabric token — run `az login` or set FABRIC_AUTH_METHOD=browser."
+
+    url = (
+        f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}"
+        f"/items/{notebook_id}/jobs/instances?jobType=RunNotebook"
+    )
+    body = {
+        "executionData": {
+            "parameters": {
+                "name":            {"value": name,              "type": "string"},
+                "description":     {"value": description,       "type": "string"},
+                "duration":        {"value": str(duration),     "type": "string"},
+                "user":            {"value": user,              "type": "string"},
+                "timeout_seconds": {"value": str(timeout_seconds), "type": "string"},
+            }
+        }
+    }
+    try:
+        resp = requests.post(
+            url,
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json=body, timeout=30,
+        )
+        if resp.status_code not in (200, 201, 202):
+            return None, f"Submit failed (HTTP {resp.status_code}): {resp.text[:300]}"
+        location = resp.headers.get("Location")
+        if not location:
+            return None, "No Location header returned — cannot poll job status."
+    except Exception as e:
+        return None, str(e)
+
+    # Poll until Completed/Failed
+    deadline = time.time() + max_wait
+    while time.time() < deadline:
+        try:
+            poll = requests.get(
+                location,
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=30,
+            )
+            if poll.status_code != 200:
+                return None, f"Poll failed (HTTP {poll.status_code}): {poll.text[:200]}"
+            data = poll.json()
+            status = data.get("status", "")
+            if status == "Completed":
+                # The Fabric Job Instance REST API does not return the notebook exit value —
+                # mssparkutils.notebook.exit() is only accessible via mssparkutils.notebook.run().
+                # Read the newly-created RunID directly from the runs Delta table instead.
+                try:
+                    storage_token = _get_storage_token() or _get_cached_token()
+                    if not storage_token:
+                        return None, "Job completed but cannot acquire a token to read result — run `az login` and retry."
+                    dt = deltalake.DeltaTable(
+                        _onelake_path("runs"),
+                        storage_options={"account_name": "onelake", "bearer_token": storage_token},
+                    )
+                    df = dt.to_pandas()
+                    matched = df[df["Name"] == name]
+                    if "User" in matched.columns:
+                        matched = matched[matched["User"] == user]
+                    if matched.empty:
+                        return None, f"Job completed but no run named '{name}' found in runs table."
+                    if "Date" in matched.columns:
+                        matched = matched.sort_values("Date", ascending=False)
+                    new_run_id = str(matched.iloc[0]["RunID"])
+                    return new_run_id, None
+                except Exception as e:
+                    return None, f"Job completed but could not read new_run_id from runs table: {e}"
+            if status in ("Failed", "Cancelled", "Deduped"):
+                reason = data.get("failureReason") or {}
+                msg = reason.get("message") if isinstance(reason, dict) else str(reason)
+                return None, f"Job {status}: {msg or '(no reason)'}"
+            # InProgress / NotStarted — keep polling
+        except Exception as e:
+            return None, str(e)
+        time.sleep(10)
+
+    return None, f"Timed out after {max_wait}s waiting for DE_NB_Get_New_Run_Id."
+
+
 # ── Session state ─────────────────────────────────────────────────────────────
 # stage: "input" | "clarifying" | "validated" | "confirmed"
 _DEFAULTS = {
@@ -597,15 +822,23 @@ _DEFAULTS = {
     "rp_name": "",
     "rp_user": "",
     "rp_objective_function": "Maximize Bank Balance",
-    "rp_overhead_per_period": 0,
     "rp_timeout_seconds": 600,
-    "rp_duration": 1351,
+    "rp_duration": 769,
     "rp_mip_gap": 0.001,
     "rp_start_period": 461,
+    "run_id": TEST_RUN_ID,
+    "run_id_mode": "custom",  # "fabric" | "custom"
 }
-for _k, _v in _DEFAULTS.items():
-    if _k not in st.session_state:
+_DEFAULTS_VERSION = 3
+if st.session_state.get("_defaults_version") != _DEFAULTS_VERSION:
+    for _k, _v in _DEFAULTS.items():
         st.session_state[_k] = _v
+    st.session_state["_defaults_version"] = _DEFAULTS_VERSION
+    st.rerun()
+else:
+    for _k, _v in _DEFAULTS.items():
+        if _k not in st.session_state:
+            st.session_state[_k] = _v
 
 
 def reset_flow():
@@ -639,15 +872,23 @@ with st.sidebar:
     if _db_configured():
         auth_method = os.getenv("FABRIC_AUTH_METHOD", "cli").upper()
         st.success(f"Database: Configured ✓ (auth: {auth_method})")
+        period_df, period_err = _load_period_data_from_db()
+        if period_df is not None and not period_df.empty:
+            st.success(f"Period data: Live from `input_time_periods` ({len(period_df)} rows)")
+        else:
+            st.warning(f"Period data: Computed fallback — DB query failed: {period_err}")
     elif not HAS_DB_DEPS:
         st.warning("Database: Install deltalake + azure-identity\n`conda install -c conda-forge deltalake azure-identity`")
+        st.caption("Period data: Computed fallback (no DB)")
     else:
         st.warning("Database: Not configured\n(Step 3.3 preview disabled)")
+        st.caption("Period data: Computed fallback (DB not configured)")
 
     st.divider()
-    st.subheader("Test Run ID")
-    st.code(TEST_RUN_ID)
-    st.caption("All test runs reuse this ID.")
+    st.subheader("Active Run ID")
+    st.code(st.session_state.get("run_id", TEST_RUN_ID))
+    _id_mode = st.session_state.get("run_id_mode", "custom")
+    st.caption(f"Source: {'Fabric (new)' if _id_mode == 'fabric' else 'Custom / test'}")
 
     st.divider()
     st.subheader("Quick Prompts")
@@ -726,7 +967,7 @@ if submitted and cmd_val.strip():
     reset_flow()
     st.session_state.user_command = cmd_val.strip()
 
-    msgs = [INTENT_SYSTEM_MESSAGE, {"role": "user", "content": cmd_val.strip()}]
+    msgs = [_get_intent_system_message(), {"role": "user", "content": cmd_val.strip()}]
     st.session_state.messages = msgs
 
     with st.spinner("Parsing intent…"):
@@ -861,41 +1102,67 @@ if st.session_state.stage in ("validated", "confirmed"):
     st.session_state.sql_errors = sql_errors
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Step 3.2: Run ID
+# Step 3.2: Run Parameters
 # ─────────────────────────────────────────────────────────────────────────────
 if st.session_state.stage in ("validated", "confirmed"):
     st.divider()
-    st.subheader("Step 3.2: Run ID")
+    st.subheader("Step 3.2: Run Parameters")
+    st.caption("Fill in the required fields (*). Optimizer parameters are pre-filled with defaults — expand only if you need to change them for this run.")
 
-    col_a, col_b = st.columns([3, 1])
-    with col_a:
-        st.success(f"**Test mode** — reusing fixed run ID: `{TEST_RUN_ID}`")
-        st.caption("Production would create a new Run ID here via DE_NB_Get_New_Run_Id.")
+    with st.form("run_params_form"):
+        _rc1, _rc2, _rc3 = st.columns(3)
+        with _rc1:
+            _rp_description = st.text_input("Description *", value=st.session_state.rp_description, placeholder="e.g. Q3 scenario with increased OPEX")
+        with _rc2:
+            _rp_name = st.text_input("Name *", value=st.session_state.rp_name, placeholder="e.g. Q3_High_OPEX")
+        with _rc3:
+            _rp_user = st.text_input("User *", value=st.session_state.rp_user, placeholder="e.g. judy.chiu@hivefs.com")
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Step 3.3: Run Parameters
-# ─────────────────────────────────────────────────────────────────────────────
-if st.session_state.stage in ("validated", "confirmed"):
-    st.divider()
-    st.subheader("Step 3.3: Run Parameters")
-    st.caption("Fill in the required fields (*). Optional parameters have defaults — adjust if needed.")
+        _end_period = st.session_state.rp_start_period + st.session_state.rp_duration
+        with st.expander(
+            f"⚙️ Optimizer Parameters — StartPeriod={st.session_state.rp_start_period}, "
+            f"EndPeriod={_end_period}, MIPGap={st.session_state.rp_mip_gap}, "
+            f"TimeoutSeconds={st.session_state.rp_timeout_seconds}",
+            expanded=False,
+        ):
+            st.caption("Pre-filled with defaults. Only change if needed for this specific run.")
+            _oc1, _oc2 = st.columns(2)
+            with _oc1:
+                _rp_objective = st.selectbox(
+                    "Objective Function",
+                    ["Maximize Bank Balance", "Minimize Crossover Point"],
+                    index=0 if st.session_state.rp_objective_function == "Maximize Bank Balance" else 1,
+                )
+                _rp_start_period = st.text_input("Start Period", value=str(st.session_state.rp_start_period))
+                _rp_duration = st.text_input("Duration (periods)", value=str(st.session_state.rp_duration))
+                st.caption(f"→ EndPeriod = {st.session_state.rp_start_period} + {st.session_state.rp_duration} = **{_end_period}**")
+            with _oc2:
+                _rp_mip_gap = st.text_input("MIP Gap", value=str(st.session_state.rp_mip_gap))
+                _rp_timeout = st.text_input("Timeout Seconds", value=str(st.session_state.rp_timeout_seconds))
 
-    _c1, _c2 = st.columns(2)
-    with _c1:
-        st.text_input("Description *", key="rp_description", placeholder="e.g. Q3 scenario with increased OPEX")
-        st.text_input("Name *", key="rp_name", placeholder="e.g. Q3_High_OPEX")
-        st.text_input("User *", key="rp_user", placeholder="e.g. judy.chiu@hivefs.com")
-        st.selectbox(
-            "Objective Function",
-            ["Maximize Bank Balance", "Minimize Crossover Point"],
-            key="rp_objective_function",
-        )
-    with _c2:
-        st.number_input("Overhead Per Period", min_value=0, key="rp_overhead_per_period")
-        st.number_input("Timeout Seconds", min_value=1, key="rp_timeout_seconds")
-        st.number_input("Duration", min_value=1, key="rp_duration")
-        st.number_input("MIP Gap", min_value=0.0, step=0.001, format="%.4f", key="rp_mip_gap")
-        st.number_input("Start Period", min_value=0, key="rp_start_period")
+        if st.form_submit_button("Save Run Parameters", use_container_width=True):
+            st.session_state.rp_description = _rp_description
+            st.session_state.rp_name = _rp_name
+            st.session_state.rp_user = _rp_user
+            st.session_state.rp_objective_function = _rp_objective
+            try:
+                st.session_state.rp_start_period = int(_rp_start_period)
+            except ValueError:
+                pass
+            try:
+                st.session_state.rp_duration = int(_rp_duration)
+            except ValueError:
+                pass
+            try:
+                st.session_state.rp_mip_gap = float(_rp_mip_gap)
+            except ValueError:
+                pass
+            try:
+                st.session_state.rp_timeout_seconds = int(_rp_timeout)
+            except ValueError:
+                pass
+            st.session_state.preview_loaded = False
+            st.session_state.preview_data = []
 
     _rp_required_missing = [
         f.replace("rp_", "")
@@ -906,6 +1173,100 @@ if st.session_state.stage in ("validated", "confirmed"):
         st.warning(f"Required fields not yet filled: **{', '.join(_rp_required_missing)}**")
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Step 3.3: Run ID
+# ─────────────────────────────────────────────────────────────────────────────
+if st.session_state.stage in ("validated", "confirmed"):
+    st.divider()
+    st.subheader("Step 3.3: Run ID")
+
+    _mode_options = ["📡 Get new Run ID from Fabric (DE_NB_Get_New_Run_Id)", "✏️ Use existing / custom Run ID"]
+    _mode_radio = st.radio(
+        "Run ID source:",
+        _mode_options,
+        index=0 if st.session_state.run_id_mode == "fabric" else 1,
+        horizontal=True,
+        key="run_id_mode_radio",
+    )
+    _is_fabric_mode = _mode_radio == _mode_options[0]
+    _new_mode = "fabric" if _is_fabric_mode else "custom"
+    if st.session_state.run_id_mode != _new_mode:
+        st.session_state.run_id_mode = _new_mode
+        st.session_state.preview_loaded = False
+        st.session_state.preview_data = []
+        st.rerun()
+
+    if _is_fabric_mode:
+        # Required params come from Step 3.2 session state
+        _fab_name = st.session_state.get("rp_name", "").strip()
+        _fab_desc = st.session_state.get("rp_description", "").strip()
+        _fab_user = st.session_state.get("rp_user", "").strip()
+        _fab_dur  = st.session_state.get("rp_duration", 1351)
+        _fab_tmo  = st.session_state.get("rp_timeout_seconds", 600)
+        _params_ready = bool(_fab_name and _fab_desc and _fab_user)
+        _nb_configured = bool(os.getenv("FABRIC_NOTEBOOK_GET_NEW_RUN_ID"))
+
+        if not _nb_configured:
+            st.warning("`FABRIC_NOTEBOOK_GET_NEW_RUN_ID` not set in .env — add the notebook item ID.")
+        if not _params_ready:
+            st.info("Fill in **Name**, **Description**, and **User** in Step 3.2 Run Parameters above first, then get a new Run ID here.")
+        else:
+            st.caption(
+                f"Will call **DE_NB_Get_New_Run_Id** with: "
+                f"name=`{_fab_name}`, user=`{_fab_user}`, duration=`{_fab_dur}`, timeout=`{_fab_tmo}`"
+            )
+
+        _already_obtained = (
+            st.session_state.run_id_mode == "fabric"
+            and st.session_state.run_id != TEST_RUN_ID
+        )
+        if _already_obtained:
+            st.success(f"Run ID obtained: `{st.session_state.run_id}`")
+            if st.button("🔄 Get another new Run ID", disabled=not (_params_ready and _nb_configured)):
+                st.session_state.run_id = TEST_RUN_ID
+                st.session_state.preview_loaded = False
+                st.session_state.preview_data = []
+                st.rerun()
+        else:
+            if st.button(
+                "📡 Get new Run ID from Fabric",
+                type="primary",
+                disabled=not (_params_ready and _nb_configured),
+                key="btn_get_run_id",
+            ):
+                with st.spinner("Calling DE_NB_Get_New_Run_Id — this can take 1–3 minutes…"):
+                    _new_id, _err = _get_new_run_id_from_fabric(
+                        name=_fab_name,
+                        description=_fab_desc,
+                        user=_fab_user,
+                        duration=_fab_dur,
+                        timeout_seconds=_fab_tmo,
+                    )
+                if _err:
+                    st.error(f"Failed to get new Run ID: {_err}")
+                else:
+                    st.session_state.run_id = _new_id
+                    st.session_state.preview_loaded = False
+                    st.session_state.preview_data = []
+                    st.rerun()
+
+    else:  # custom mode
+        with st.form("run_id_form"):
+            _custom_id = st.text_input(
+                "Run ID:",
+                value=st.session_state.run_id,
+                placeholder="e.g. dbc14f6d-b0f3-4556-b7e5-2e63b4037edc",
+            )
+            if st.form_submit_button("Use this Run ID"):
+                _clean_id = _custom_id.strip()
+                if _clean_id:
+                    if st.session_state.run_id != _clean_id:
+                        st.session_state.run_id = _clean_id
+                        st.session_state.preview_loaded = False
+                        st.session_state.preview_data = []
+                    st.rerun()
+        st.info(f"Active Run ID: `{st.session_state.run_id}`")
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Step 3.4: Preview — Before / After comparison
 # ─────────────────────────────────────────────────────────────────────────────
 if st.session_state.stage in ("validated", "confirmed"):
@@ -913,34 +1274,36 @@ if st.session_state.stage in ("validated", "confirmed"):
     mutations = intent.get("sql_mutations") or []
     sql_ok = not st.session_state.sql_errors
 
+    # Build run params SQL for preview (same as Step 4.1)
+    _rp_for_preview = {
+        "description": st.session_state.get("rp_description", ""),
+        "name": st.session_state.get("rp_name", ""),
+        "user": st.session_state.get("rp_user", ""),
+        "objective_function": st.session_state.get("rp_objective_function", "Maximize Bank Balance"),
+        "timeout_seconds": st.session_state.get("rp_timeout_seconds", 600),
+        "duration": st.session_state.get("rp_duration", 1351),
+        "mip_gap": st.session_state.get("rp_mip_gap", 0.001),
+        "start_period": st.session_state.get("rp_start_period", 461),
+    }
+    _form_mutations = _run_params_to_sql(_rp_for_preview)
+    # Run params SQL first, then NL intent mutations
+    _all_preview_stmts = [(s, "Run Parameters") for s in _form_mutations] + [(s, "NL Intent") for s in mutations]
+
     st.divider()
     st.subheader("Step 3.4: Preview — Review Changes Before Applying")
 
     if not sql_ok:
         st.error("Fix the SQL validation errors above before previewing.")
 
-    elif not mutations:
-        st.info("No SQL mutations — only run parameters will change. Nothing to preview in the database.")
-        if st.session_state.stage == "validated":
-            _rp_ok_nm = all(
-                st.session_state.get(f, "").strip()
-                for f in ("rp_description", "rp_name", "rp_user")
-            )
-            if not _rp_ok_nm:
-                st.warning("Fill in all required Run Parameters above (description, name, user) before proceeding.")
-            if st.button("✅ Looks good — Proceed to Execute", type="primary", disabled=not _rp_ok_nm):
-                st.session_state.stage = "confirmed"
-                st.session_state.preview_confirmed = True
-                st.rerun()
-
     else:
-        # Load preview data once
+        # Load preview data once (triggered by run ID change or run params save)
         if not st.session_state.preview_loaded:
             preview_data = []
             db_ok = _db_configured()
 
+            _preview_run_id = st.session_state.run_id
             with st.spinner("Loading current data from Lakehouse…"):
-                for stmt in mutations:
+                for stmt, source in _all_preview_stmts:
                     upper = stmt.strip().upper()
                     _table_m = re.match(
                         r"(?:UPDATE|DELETE\s+FROM)\s+(\w+)",
@@ -951,6 +1314,7 @@ if st.session_state.stage in ("validated", "confirmed"):
                         "table": _table_m.group(1) if _table_m else "unknown",
                         "before_df": None, "after_df": None,
                         "changed_cols": [], "set_map": {}, "error": None,
+                        "source": source,
                     }
 
                     if not db_ok:
@@ -962,8 +1326,8 @@ if st.session_state.stage in ("validated", "confirmed"):
                             entry["set_map"] = _parse_set_clause(stmt)
                     elif upper.startswith("UPDATE"):
                         try:
-                            sel = _derive_preview_select(stmt, TEST_RUN_ID)
-                            before_df, err = _query_df(sel)
+                            sel = _derive_preview_select(stmt, _preview_run_id)
+                            before_df, err = _query_df(sel, run_id=_preview_run_id)
                             if err:
                                 entry["error"] = err
                             else:
@@ -983,8 +1347,8 @@ if st.session_state.stage in ("validated", "confirmed"):
                             whr = re.search(r"(WHERE\s+.+)$", stmt, re.IGNORECASE | re.DOTALL)
                             if tbl and whr:
                                 sel = f"SELECT * FROM {tbl.group(1)} {whr.group(1)}"
-                                sel = sel.replace("{RUN_ID}", TEST_RUN_ID).replace("{run_id}", TEST_RUN_ID)
-                                before_df, err = _query_df(sel)
+                                sel = sel.replace("{RUN_ID}", _preview_run_id).replace("{run_id}", _preview_run_id)
+                                before_df, err = _query_df(sel, run_id=_preview_run_id)
                                 entry["before_df"] = before_df
                                 entry["error"] = err
                         except Exception as e:
@@ -1001,7 +1365,7 @@ if st.session_state.stage in ("validated", "confirmed"):
         for idx, entry in enumerate(st.session_state.preview_data, 1):
             total = len(st.session_state.preview_data)
             with st.expander(
-                f"Mutation {idx} / {total} — {entry['verb']} {entry['table']}",
+                f"Mutation {idx}/{total} — {entry.get('source', 'NL Intent')}: {entry['verb']} {entry['table']}",
                 expanded=True,
             ):
                 st.code(entry["sql"], language="sql")
@@ -1036,7 +1400,7 @@ if st.session_state.stage in ("validated", "confirmed"):
                                 st.markdown(f"- **{col}**: → `{new_val}` *(column not found in current data)*")
                     elif before_df is not None and len(before_df) == 0:
                         st.warning(
-                            f"No rows found for run ID `{TEST_RUN_ID}`. "
+                            f"No rows found for run ID `{st.session_state.run_id}`. "
                             "The table might not have been copied yet, or the run ID doesn't exist."
                         )
 
@@ -1109,7 +1473,6 @@ if st.session_state.stage == "confirmed":
         "name": st.session_state.get("rp_name", ""),
         "user": st.session_state.get("rp_user", ""),
         "objective_function": st.session_state.get("rp_objective_function", "Maximize Bank Balance"),
-        "overhead_per_period": st.session_state.get("rp_overhead_per_period", 0),
         "timeout_seconds": st.session_state.get("rp_timeout_seconds", 600),
         "duration": st.session_state.get("rp_duration", 1351),
         "mip_gap": st.session_state.get("rp_mip_gap", 0.001),
@@ -1123,22 +1486,31 @@ if st.session_state.stage == "confirmed":
         "Only press the buttons when you're ready to execute for real."
     )
 
+    _active_run_id = st.session_state.run_id
+
     # Step 4.1
+    form_mutations = _run_params_to_sql(run_params)
+    all_mutations = form_mutations + mutations
+
     with st.expander("Step 4.1: Update Input (DE_NB_Update_Input)", expanded=True):
+        total_stmts = len(all_mutations)
+        st.markdown(
+            f"Will run **DE_NB_Update_Input** with `run_id = {_active_run_id}` "
+            f"and {total_stmts} SQL statement{'s' if total_stmts != 1 else ''} "
+            f"({len(form_mutations)} from form + {len(mutations)} from NL intent)."
+        )
+
+        st.markdown("**Run Parameters → `input_parameters` (from form):**")
+        for _sql in form_mutations:
+            st.code(_sql, language="sql")
+
         if mutations:
-            st.markdown(
-                f"Will run **DE_NB_Update_Input** with `run_id = {TEST_RUN_ID}` "
-                f"and {len(mutations)} SQL statement{'s' if len(mutations) != 1 else ''}."
-            )
+            st.markdown("**NL intent mutations:**")
             for _i, _sql in enumerate(mutations, 1):
                 st.code(_sql, language="sql")
-        else:
-            st.info("No SQL mutations — this step will be skipped.")
 
         if st.button("▶ Run Step 4.1: Update Input", type="primary", key="btn_step6"):
-            if not mutations:
-                st.success("Skipped — no SQL mutations.")
-            elif not os.getenv("FABRIC_NOTEBOOK_UPDATE_INPUT_ID"):
+            if not os.getenv("FABRIC_NOTEBOOK_UPDATE_INPUT_ID"):
                 st.warning(
                     "FABRIC_NOTEBOOK_UPDATE_INPUT_ID not set in .env — "
                     "add the notebook item ID to enable this."
@@ -1146,10 +1518,10 @@ if st.session_state.stage == "confirmed":
             else:
                 with st.spinner("Submitting to Fabric…"):
                     import base64
-                    sql_b64 = base64.b64encode(";\n".join(mutations).encode()).decode()
+                    sql_b64 = base64.b64encode(";\n".join(all_mutations).encode()).decode()
                     ok, msg = run_fabric_notebook(
                         "FABRIC_NOTEBOOK_UPDATE_INPUT_ID",
-                        {"run_id": TEST_RUN_ID, "sql_statements_b64": sql_b64},
+                        {"run_id": _active_run_id, "sql_statements_b64": sql_b64},
                     )
                 if ok:
                     st.success(f"Step 4.1 submitted. {msg}")
@@ -1158,9 +1530,11 @@ if st.session_state.stage == "confirmed":
 
     # Step 4.2
     with st.expander("Step 4.2: Run Model (DE_NB_RunModel)", expanded=True):
-        st.markdown(f"Will run **DE_NB_RunModel** with `run_id = {TEST_RUN_ID}`.")
-        if run_params:
-            st.json(run_params)
+        st.markdown(
+            f"Will run **DE_NB_RunModel** with `run_id = {_active_run_id}`. "
+            "The notebook reads all configuration directly from `input_parameters` "
+            "(written by Step 4.1 above)."
+        )
 
         if st.button("▶ Run Step 4.2: Run Model", type="primary", key="btn_step7"):
             if not os.getenv("FABRIC_NOTEBOOK_RUN_MODEL_ID"):
@@ -1172,7 +1546,7 @@ if st.session_state.stage == "confirmed":
                 with st.spinner("Submitting to Fabric…"):
                     ok, msg = run_fabric_notebook(
                         "FABRIC_NOTEBOOK_RUN_MODEL_ID",
-                        {"run_id": TEST_RUN_ID, "run_params": json.dumps(run_params)},
+                        {"run_id": _active_run_id},
                     )
                 if ok:
                     st.success(f"Step 4.2 submitted. {msg}")
@@ -1182,7 +1556,7 @@ if st.session_state.stage == "confirmed":
     # Step 4.3
     with st.expander("Step 4.3: Result Summary", expanded=True):
         st.json({
-            "new_run_id": TEST_RUN_ID,
+            "run_id": _active_run_id,
             "plain_english": intent.get("plain_english", ""),
             "sql_mutations_applied": len(mutations),
         })

@@ -1256,11 +1256,6 @@ The Parameters table is the control panel for each optimization run. It defines:
 - Reference PeriodIDs from input_time_periods table
 - Typically spans 12-60 months
 
-**OverheadPerPeriod:**
-- Fixed operational expenses incurred each period
-- Not tied to deployment volumes
-- Represents G&A costs (salaries, technology, facilities)
-
 **MIPGap:**
 - Mixed Integer Programming solver tolerance setting
 - Lower values = more precise but slower solve times

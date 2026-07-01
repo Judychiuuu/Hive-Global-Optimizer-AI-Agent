@@ -2,7 +2,7 @@
 
 **Type:** Input | **HasRunID:** Yes
 
-Aggregate deployment targets or limits across customer groups and time periods.
+Aggregate deployment limits across customer groups and time periods.
 
 ## Primary Key
 `RunID + FromPeriodID + ToPeriodID`

@@ -11,6 +11,7 @@ Loan financing terms for each capital raise from investors.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `RunID` | String | Yes | PK |
+| `PortfolioID` | Integer | Yes | PK |
 | `InvestorCapitalID` | String | Yes | PK — unique ID for this loan/raise |
 | `InvestorCapitalName` | String | Yes | Display name |
 | `InvestorID` | String | Yes | FK → input_investors |

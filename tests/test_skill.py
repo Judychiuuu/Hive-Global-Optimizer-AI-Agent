@@ -57,7 +57,7 @@ The response schema has these top-level fields:
 
 Score the response against this rubric (12 points total):
 
-1. run_params_optimizer (0-3): +1 per correct field among objective_function, duration, overhead_per_period, mip_gap, timeout_seconds, start_period (max 3); -1 per hallucinated value
+1. run_params_optimizer (0-3): +1 per correct field among objective_function, duration, mip_gap, timeout_seconds, start_period (max 3); -1 per hallucinated value
 2. run_params_identity (0-1): +1 if old_run_id_to_copy, name, description, user use placeholders unless user explicitly provided values; 0 if fabricated
 3. sql_verb (0-1): +1 if only UPDATE/INSERT/DELETE verbs used in sql_mutations; 0 if SELECT appears or wrong verb; award 1 if no mutations are required
 4. sql_table (0-1): +1 if SQL targets the correct table; 0 if wrong table; award 1 if no mutations are required

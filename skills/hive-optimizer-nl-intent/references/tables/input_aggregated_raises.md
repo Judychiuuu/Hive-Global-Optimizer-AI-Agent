@@ -17,7 +17,7 @@ Aggregate capital raise targets or limits across a range of periods.
 | `FromPeriodID` | Integer | Yes | PK — start of period range (FK → input_time_periods) |
 | `ToPeriodID` | Integer | Yes | PK — end of period range; FromPeriodID ≤ ToPeriodID |
 | `AggRaises` | Float | Yes | Max or exact capital that can be raised in [From, To] |
-| `ConstraintType` | String | Yes | PK — 'LessThanOrEqualTo' or 'EqualTo' |
+| `ConstraintType` | String | Yes | PK — 'LessThanOrEqual' or 'Equal' |
 
 ## Common mutations
 
@@ -26,7 +26,7 @@ Insert a new raise constraint:
 INSERT INTO input_aggregated_raises
   (RunID, FromPeriodID, ToPeriodID, AggRaises, ConstraintType)
 VALUES
-  ('{run_id}', 465, 521, 80000000, 'LessThanOrEqualTo')
+  ('{run_id}', 465, 521, 80000000, 'LessThanOrEqual')
 ```
 
 Update an existing constraint:
@@ -36,7 +36,7 @@ SET AggRaises = 80000000
 WHERE RunID = '{run_id}'
   AND FromPeriodID = 465
   AND ToPeriodID = 521
-  AND ConstraintType = 'LessThanOrEqualTo'
+  AND ConstraintType = 'LessThanOrEqual'
 ```
 
 ## Ambiguity note
